@@ -3,7 +3,8 @@
 use crate::correlate::{BaseHit, make_base_hit};
 use crate::event::ParsedEvent;
 use crate::input::{self, ScanTarget, SkipReason};
-use crate::parsers::{self, LogFormat, ParseContext, TzAssumption};
+use crate::parsers::layout::FormatRegistry;
+use crate::parsers::{self, FileFormat, ParseContext, TzAssumption};
 use crate::rules::RuleSet;
 use crate::summary::Summary;
 use chrono::{DateTime, Utc};
@@ -41,6 +42,8 @@ pub struct ScanOptions {
     pub tz: TzAssumption,
     pub hostname_hint: Option<String>,
     pub time_filter: TimeFilter,
+    /// The custom formats of `config/custom_log_formats.yaml` (or `--custom-formats`).
+    pub custom_formats: Arc<FormatRegistry>,
 }
 
 /// What scanning one target produced.
@@ -49,7 +52,7 @@ pub struct ScanResult {
     pub detections: Vec<Detection>,
     pub base_hits: Vec<BaseHit>,
     pub summary: Summary,
-    pub format: Option<LogFormat>,
+    pub format: Option<FileFormat>,
     pub skipped: Option<SkipReason>,
     /// True when at least one event carried its own zone and at least one did not (amendment A7).
     pub mixed_zone_sources: bool,
@@ -83,18 +86,18 @@ pub fn scan_target(target: &ScanTarget, ruleset: &RuleSet, opts: &ScanOptions) -
     ctx.display_name = target.display_name.clone();
     ctx.hostname_hint = opts.hostname_hint.clone();
     ctx.extra_tags = target.extra_tags.clone();
-    let format = match target
-        .format
-        .or_else(|| parsers::sniff_format(&sample, &ctx.hints))
-    {
-        Some(f) => f,
-        None => {
-            result.skipped = Some(SkipReason::UnrecognizedFormat);
-            result.summary.files_skipped = 1;
-            return result;
-        }
-    };
-    result.format = Some(format);
+    let format =
+        match target.format.clone().or_else(|| {
+            parsers::detect_format(&sample, &ctx.hints, &target.path, &opts.custom_formats)
+        }) {
+            Some(f) => f,
+            None => {
+                result.skipped = Some(SkipReason::UnrecognizedFormat);
+                result.summary.files_skipped = 1;
+                return result;
+            }
+        };
+    result.format = Some(format.clone());
     let reader = match input::open_reader(&target.path) {
         Ok(r) => r,
         Err(e) => {
@@ -115,7 +118,7 @@ pub fn scan_target(target: &ScanTarget, ruleset: &RuleSet, opts: &ScanOptions) -
             None
         }
     });
-    scan_lines(lines, format, ctx, target, ruleset, opts, &mut result);
+    scan_lines(lines, &format, ctx, target, ruleset, opts, &mut result);
     result.read_error = read_error;
     result
 }
@@ -123,7 +126,7 @@ pub fn scan_target(target: &ScanTarget, ruleset: &RuleSet, opts: &ScanOptions) -
 /// Scan an iterator of lines (used for files and for the journalctl stream).
 pub fn scan_lines<I: Iterator<Item = String>>(
     lines: I,
-    format: LogFormat,
+    format: &FileFormat,
     ctx: ParseContext,
     target: &ScanTarget,
     ruleset: &RuleSet,
@@ -133,11 +136,7 @@ pub fn scan_lines<I: Iterator<Item = String>>(
     let file: Arc<str> = Arc::from(target.display_name.as_str());
     let mut parser = parsers::parser_for(format, ctx);
     result.summary.files_scanned = 1;
-    *result
-        .summary
-        .formats
-        .entry(format.name().to_string())
-        .or_default() += 1;
+    *result.summary.formats.entry(format.name()).or_default() += 1;
     let mut saw_zoned = false;
     let mut saw_naive = false;
     for (idx, line) in lines.enumerate() {

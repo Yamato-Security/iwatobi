@@ -45,6 +45,9 @@ Iwatobiには、実行可能なSigmaHQのLinuxおよびWebサーバー向けル�
   出力、vsftpdとClamAVのログ、Apache / nginxのアクセスログ（common、combined、vhost_combined、JSON
   Lines）、Apache 2.2/2.4とnginxのエラーログ、PHPのエラーログ、php-fpmのログ。PHPエンジンのメッセージは、
   どこに出力されていても認識します（Apacheのエラーログ、nginxのFastCGI stderr、php-fpm、syslog）。
+- **カスタムフォーマット**: nginxの`log_format`やApacheの`LogFormat`を変更したアクセスログを自動的に
+  認識します。それ以外のレイアウトも、`config/custom_log_formats.yaml`にnginxのフォーマット、Apacheの
+  フォーマット、または正規表現で定義できます（[カスタムログフォーマット](#カスタムログフォーマットcustom-log-formats)）。
 - **出力**: ターミナルにはカラーのタイムライン（タイムスタンプ、ルールタイトル、レベル、ログソース、
   ログファイル、行番号、詳細）を表示し、CSV / JSON / JSONLファイルにはDFIRレポートに必要な情報（MITRE ATT&CKの
   戦術と技術、解析したすべてのフィールド、ルールファイルとID、ログファイルと行番号）を保存します。
@@ -123,7 +126,9 @@ Input:
   -f, --file <FILE>         File path to one log file
   -l, --live-analysis       Analyze the local log files that the loaded rules need (/var/log, journalctl)
       --log-format <FORMAT> Force the log format of every input file instead of detecting it: syslog,
-                            applog, access, access-json, apache-error, nginx-error, php-error, php-fpm
+                            applog, access, access-json, apache-error, nginx-error, php-error, php-fpm,
+                            or the name of a custom format
+      --custom-formats <FILE>  Custom log format definitions (default: config/custom_log_formats.yaml)
 
 General Options:
   -r, --rules <DIR/FILE>    Specify a custom rule directory or file (default: ./rules)
@@ -177,6 +182,96 @@ syslog（RFC 3164）、Apacheのエラーログ、nginxのエラーログ、php-
 とおりに使用します。タイムゾーントークンのないPHPの行も`-z`で読み込みます。出力はデフォルトでローカル
 時刻、`-U`でUTCです。RFC 3164の行には年もないため、ファイルの更新日時の年を使用し、それでは未来の
 日時になる行は1年前とみなします。
+
+### カスタムログフォーマット（Custom log formats）
+
+Iwatobiは各ファイルのフォーマットを自動的に判別します。[特徴](#-特徴)に挙げた組み込みのフォーマットに
+加えて、レイアウトが変更されたログも扱えます。
+
+**レイアウトが異なるアクセスログは自動的に認識します。** nginxの`log_format`やApacheの`LogFormat`は
+よく変更されます（バーチャルホストを先頭に置く、リクエストをメソッド・URL・プロトコルに分ける、
+応答時間を追加する、など）。ファイルがどの組み込みフォーマットにも一致しない場合、Iwatobiは先頭の行を
+読んで各列の内容を判別します。判別するのは、時刻（`[24/Oct/2026:15:35:32 +0000]`、ISO 8601、エポック秒）、
+リクエスト（引用符で囲まれたリクエスト行、またはメソッド・URL・プロトコル）、ステータス、クライアントIP、
+リファラー、ユーザーエージェント、送信バイト数、バーチャルホストです。少なくとも時刻・リクエスト・
+ステータス・クライアントIP・ユーザーエージェントがあり、サンプルのほぼすべての行が当てはまる場合にだけ
+そのレイアウトを使います。各列には組み込みのアクセスログと同じSigmaのWebサーバーのフィールド名
+（`c-ip`、`cs-method`、`cs-uri-query`、`sc-status`など）が付くので、`webserver`のルールがすべて
+適用されます。その他の列は`Details`に`field<N>`（Nは列番号）として残ります。
+
+スキャンの後、検出したレイアウトをnginxの`log_format`として表示します。
+
+```
+Access log layout detected automatically: 12 files
+    [$time_local] $remote_addr $host $request_method $request_uri $server_protocol $status $body_bytes_sent $field9 "$http_referer" "$http_user_agent"
+```
+
+一度確認してください。列の判別が間違っている場合や、`field<N>`の列に名前を付けたい場合は、この
+レイアウトをnginxのフォーマットとして`config/custom_log_formats.yaml`にコピーして修正します
+（`$field9` → `$request_time`）。
+
+**その他のレイアウトは`config/custom_log_formats.yaml`に定義します。** どのフォーマットにも一致しない
+ファイルはスキップされ、スキャンの最後に`3 files were skipped because the log format was not recognized`
+のような警告が表示されます（`-v`で一覧を表示します）。各エントリには`name`と、次のいずれか1つを書きます。
+
+| キー | 値 |
+| --- | --- |
+| `nginx` | nginxの`log_format`の文字列、または`nginx.conf`の`log_format`ディレクティブ全体 |
+| `apache` | Apacheの`LogFormat`の文字列、または`LogFormat`ディレクティブ全体 |
+| `regex` | フィールドごとに名前付きグループを持つ正規表現: `(?P<name>...)` |
+
+任意の設定:
+
+| キー | 値 |
+| --- | --- |
+| `files` | そのフォーマットを使うファイル名のパターン（`*`、`?`、`[abc]`）。`/`を含むパターンはパス全体と照合します。`files`がない場合はすべてのファイルで試し、先頭の行の半分以上に一致したときに使います |
+| `time_format` | 時刻のフォーマット（[chronoのstrftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html)の書式。例: `'%Y-%m-%d %H:%M:%S'`）。省略するとCLF、ISO 8601、エポック秒を読み取ります。タイムゾーンのない時刻は`-z`で指定したタイムゾーンとして読み込みます |
+| `logsource` | （`regex`のみ）ログのSigmaのlogsource。デフォルトは`{category: webserver}`。例: `{product: linux, service: auth}`、`{product: apache, service: error}` |
+
+```yaml
+formats:
+  # nginx.confからコピー
+  - name: shop-nginx
+    nginx: |
+      log_format shop '$remote_addr [$time_local] "$request" '
+                      '$status $body_bytes_sent $request_time';
+    files: ['shop-access.log*']
+
+  # Apache: タイムゾーンのない日付と時刻（-zで読み込み）
+  - name: intranet-apache
+    apache: '%{%Y-%m-%d %H:%M:%S}t %h "%r" %>s %b "%{User-Agent}i" %D'
+    files: ['intranet*.log']
+
+  # Webサーバー以外のログ: 正規表現とlogsource
+  - name: vpnd
+    regex: '^(?P<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (?P<hostname>\S+) (?P<process>[\w-]+)\[(?P<pid>\d+)\]: (?P<message>.*)$'
+    time_format: '%Y-%m-%d %H:%M:%S'
+    logsource: {product: linux, service: sshd}
+    files: ['vpnd*.log']
+```
+
+Webサーバーのフォーマット（`nginx`、`apache`、logsourceが`webserver`の`regex`）では、次の名前を
+Sigmaのフィールドに対応付けます。その他の変数やグループは、その名前のまま`Details`に入ります。
+
+| nginxの変数 / 正規表現のグループ | Apache | Sigmaのフィールド |
+| --- | --- | --- |
+| `remote_addr`、`client_ip` | `%h`、`%a` | `c-ip` |
+| `request`（`GET /x HTTP/1.1`） | `%r` | `cs-method`、`cs-uri-query`、`cs-version` |
+| `request_method` | `%m` | `cs-method` |
+| `request_uri`（または`uri` + `args`） | `%U%q` | `cs-uri-query`、`cs-uri-stem` |
+| `server_protocol` | `%H` | `cs-version` |
+| `status` | `%s`、`%>s` | `sc-status` |
+| `body_bytes_sent`、`bytes_sent` | `%b`、`%B`、`%O` | `sc-bytes` |
+| `http_referer` | `%{Referer}i` | `cs-referer` |
+| `http_user_agent` | `%{User-Agent}i` | `cs-user-agent` |
+| `host`、`http_host`、`server_name` | `%v`、`%V` | `cs-host` |
+| `remote_user` | `%u` | `cs-username` |
+| `time_local`、`time_iso8601`、`msec`、`time`、`timestamp` | `%t`、`%{format}t` | イベントの時刻 |
+
+`regex`では、Sigmaのフィールド名の`-`を`_`に置き換えて書きます（`c_ip`、`cs_method`、`sc_status`）。
+グループ名には`-`を使えないためです。カスタムフォーマットの名前は`--log-format`にも指定でき
+（`--log-format shop-nginx`）、`-v`では`custom:shop-nginx`のように表示されます（自動検出したレイアウトは
+`access-auto`）。別のファイルから定義を読み込むには`--custom-formats <FILE>`を使います。
 
 ### 出力プロファイル
 

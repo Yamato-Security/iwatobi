@@ -931,3 +931,183 @@ fn a_truncated_gz_file_is_reported() {
     assert_eq!(r.code, 0, "{}", r.stdout);
     assert!(r.stdout.contains("read error after line"), "{}", r.stdout);
 }
+
+// ----- custom and detected log formats (amendment A21) ---------------------------------------
+
+const CUSTOM_LOGS: &str = "test_files/custom/logs";
+const CUSTOM_FORMATS: &str = "test_files/custom/custom_log_formats.yaml";
+const AUTO_LAYOUT: &str = r#"[$time_local] $remote_addr $host $request_method $request_uri $server_protocol $status $body_bytes_sent $field9 "$http_referer" "$http_user_agent""#;
+
+#[test]
+fn an_unknown_access_log_layout_is_detected_automatically() {
+    let (r, rows) = scan_jsonl("-f", "test_files/custom/logs/auto/www-access.log", &[]);
+    let c = count_by_title(&rows);
+    expect(&c, MEM_PRESSURE, 3);
+    expect(&c, RAPID_POST, 1);
+    assert_eq!(rows.len(), 4);
+    assert!(
+        r.stdout
+            .contains("Access log layout detected automatically: 1 file"),
+        "{}",
+        r.stdout
+    );
+    assert!(r.stdout.contains(AUTO_LAYOUT), "{}", r.stdout);
+    let first = &rows[0];
+    assert_eq!(first["Timestamp"], "2026-10-24 15:35:32.000 +00:00");
+    assert_eq!(first["LogSource"], "webserver");
+    assert_eq!(first["LineNumber"], 3);
+    assert_eq!(first["Details"]["SrcIP"], "192.0.2.10");
+    assert_eq!(first["Details"]["Status"], 200);
+    assert_eq!(first["Details"]["Bytes"], 149);
+    assert_eq!(first["Details"]["cs-host"], "www.example.com");
+    assert_eq!(first["Details"]["field9"], "0.512");
+    assert!(first["Details"].get("remote_addr").is_none());
+}
+
+#[test]
+fn custom_formats_are_read_from_the_configuration_file() {
+    let (r, rows) = scan_jsonl("-d", CUSTOM_LOGS, &["--custom-formats", CUSTOM_FORMATS]);
+    assert!(r.stdout.contains("Custom log formats: 3"), "{}", r.stdout);
+    assert!(!r.stdout.contains("not recognized"), "{}", r.stdout);
+    let c = count_by_title(&rows);
+    // auto 3, shop-nginx 1, intranet-apache 1
+    expect(&c, MEM_PRESSURE, 5);
+    expect(&c, RAPID_POST, 1);
+    expect(&c, SSHD, 1);
+    assert_eq!(rows.len(), 7);
+    let by_file = |name: &str| -> Vec<&Value> {
+        rows.iter()
+            .filter(|r| r["LogFile"].as_str().unwrap_or("").ends_with(name))
+            .collect()
+    };
+    // nginx: the time carries +0900
+    let shop = by_file("shop-access.log");
+    assert_eq!(shop.len(), 1);
+    assert_eq!(shop[0]["Timestamp"], "2026-10-24 06:35:32.000 +00:00");
+    assert_eq!(
+        shop[0]["Details"]["URI"],
+        "/?q0000000=v&q0000001=v&q0000002=v&q0000003=v&q0000004=v"
+    );
+    assert_eq!(shop[0]["Details"]["request_time"], "0.512");
+    // Apache %{%Y-%m-%d %H:%M:%S}t: no zone, read with -z UTC
+    let intranet = by_file("intranet.log");
+    assert_eq!(intranet.len(), 1);
+    assert_eq!(intranet[0]["Timestamp"], "2026-10-24 15:35:32.000 +00:00");
+    assert_eq!(intranet[0]["Details"]["UA"], "python-requests/2.32.3");
+    assert_eq!(intranet[0]["Details"]["request_time_us"], "512004");
+    // regex with its own logsource
+    let vpnd = by_file("vpnd.log");
+    assert_eq!(vpnd.len(), 1);
+    assert_eq!(vpnd[0]["LogSource"], "linux/sshd");
+    assert_eq!(vpnd[0]["Details"]["Msg"], "Corrupted MAC on input");
+    assert_eq!(vpnd[0]["Details"]["hostname"], "bastion01");
+}
+
+#[test]
+fn unrecognized_formats_are_summarized_with_a_hint() {
+    let r = run(&[
+        "dfir-timeline",
+        "-d",
+        CUSTOM_LOGS,
+        "-q",
+        "-K",
+        "-w",
+        "-z",
+        "UTC",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(
+        r.stdout.contains(
+            "3 files were skipped because the log format was not recognized (-v lists them). To scan them, describe the format in config/custom_log_formats.yaml"
+        ),
+        "{}",
+        r.stdout
+    );
+}
+
+#[test]
+fn log_format_forces_a_custom_format_by_name() {
+    let r = run(&[
+        "dfir-timeline",
+        "-f",
+        "test_files/custom/logs/nginx/shop-access.log",
+        "--custom-formats",
+        CUSTOM_FORMATS,
+        "--log-format",
+        "shop-nginx",
+        "-q",
+        "-K",
+        "-w",
+        "-v",
+    ]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(
+        r.stdout
+            .contains("(custom:shop-nginx, 3 events, 1 detections)"),
+        "{}",
+        r.stdout
+    );
+}
+
+#[test]
+fn bad_custom_formats_and_unknown_format_names_are_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let bad = dir.path().join("formats.yaml");
+    std::fs::write(
+        &bad,
+        "formats:\n  - name: broken\n    nginx: 'no variables'\n",
+    )
+    .unwrap();
+    let bad = bad.to_string_lossy().to_string();
+    let r = run(&[
+        "dfir-timeline",
+        "-d",
+        CUSTOM_LOGS,
+        "-q",
+        "-K",
+        "--custom-formats",
+        &bad,
+    ]);
+    assert_eq!(r.code, 1);
+    let out = format!("{}{}", r.stdout, r.stderr);
+    assert!(
+        out.contains("format \"broken\": the format has no fields"),
+        "{out}"
+    );
+
+    let missing = dir
+        .path()
+        .join("missing.yaml")
+        .to_string_lossy()
+        .to_string();
+    let r = run(&[
+        "dfir-timeline",
+        "-d",
+        CUSTOM_LOGS,
+        "-q",
+        "-K",
+        "--custom-formats",
+        &missing,
+    ]);
+    assert_eq!(r.code, 1);
+    assert!(format!("{}{}", r.stdout, r.stderr).contains("Could not read the custom log formats"));
+
+    let r = run(&[
+        "dfir-timeline",
+        "-d",
+        CUSTOM_LOGS,
+        "-q",
+        "-K",
+        "--custom-formats",
+        CUSTOM_FORMATS,
+        "--log-format",
+        "nosuch",
+    ]);
+    assert_eq!(r.code, 1);
+    let out = format!("{}{}", r.stdout, r.stderr);
+    assert!(out.contains("'nosuch' is not a log format"), "{out}");
+    assert!(
+        out.contains("php-fpm, shop-nginx, intranet-apache, vpnd"),
+        "{out}"
+    );
+}

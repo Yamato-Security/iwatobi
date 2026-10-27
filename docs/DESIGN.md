@@ -420,3 +420,23 @@ A20. **One Details column, no Computer column (0.1.0 re-release).** Linux log li
 gone, and so is the details/extra split of `ParsedEvent` (`details_len`, `end_details`). No default profile
 has `Computer`: an access log has no host name and a live scan's is the local one. `%Computer%` stays as a
 placeholder for custom profiles (syslog host names from a central log server). This overrides §9, A15 and A18.
+
+A21. **Custom and detected log formats (0.1.0 re-release).** `parsers/layout.rs` compiles a *layout* (one
+anchored regex whose capture groups are named fields) from an nginx `log_format` (the string or the whole
+directive; `$var`/`${var}`; a field between `"` is a quoted value with `\"`/`\x22` unescaped, between `[`/`]` a
+bracketed one, `$time_local` keeps its space, otherwise one possibly empty token), an Apache `LogFormat` (`%h`,
+`%t`, `%r`, `%>s`, `%{Header}i`, `%{strftime}t` → `time_format`, …, mapped to the nginx variable names), or a
+user regex (named groups; `c_ip` → `c-ip`). Web server layouts feed the JSON access log mapping
+(`RecordBuilder`, shared with `AccessJsonParser`), without repeating the columns it mapped or the time, and with
+`-` → null for the rest; a regex can name any supported logsource (`Other` kind: fields keep their names, time
+from `TIME_KEYS`, `hostname`/`host` → hostname). Formats live in `config/custom_log_formats.yaml`
+(`--custom-formats FILE`; `formats:` list with `name`, one of `nginx`/`apache`/`regex`, optional `files` globs,
+`time_format`, `logsource`; unknown keys, duplicate or built-in names and unsupported logsources are load
+errors) and are `--log-format` values. Detection order per file: a custom format that applies to the file
+(`files`) and matches the sample (one line with `files`, otherwise half), then the built-in sniffing, then
+`infer_access_layout`: tokenize (bare / `"…"` / `[…]`), keep the dominant token shape (≥ 80 % of the sampled
+entry lines), classify each column from ≥ 90 % of its non-dash values, and assign time, request (or method +
+path + protocol), status, client IP and user agent (all required), then referer, bytes, virtual host and
+ident/user; the rest are `field<N>`. The result is written as an nginx `log_format` and compiled with the same
+code, so the printed layout pastes into the configuration unchanged. Detected layouts and the number of files
+skipped as unrecognized are reported after the scan. Format names: `custom:<name>`, `access-auto`.

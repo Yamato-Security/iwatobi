@@ -7,6 +7,7 @@
 
 pub mod access;
 pub mod apache_error;
+pub mod layout;
 pub mod nginx_error;
 pub mod php;
 pub mod syslog;
@@ -15,7 +16,9 @@ pub mod timestamp;
 use crate::event::ParsedEvent;
 use crate::logsource::LogSourceTag;
 use chrono::{DateTime, FixedOffset, Utc};
+use layout::{FormatRegistry, Layout};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 pub use timestamp::TzAssumption;
 
 /// The log formats iwatobi can parse.
@@ -87,6 +90,38 @@ impl LogFormat {
 impl std::fmt::Display for LogFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.name())
+    }
+}
+
+/// How one file is read: a built-in format, or a field layout (a custom format from
+/// `config/custom_log_formats.yaml`, or an access log layout detected automatically).
+#[derive(Clone, Debug)]
+pub enum FileFormat {
+    Builtin(LogFormat),
+    Layout(Arc<Layout>),
+}
+
+impl FileFormat {
+    /// `syslog`, `custom:<name>` or `access-auto`.
+    pub fn name(&self) -> String {
+        match self {
+            FileFormat::Builtin(f) => f.name().to_string(),
+            FileFormat::Layout(l) => l.format_name(),
+        }
+    }
+
+    /// The layout when it was detected automatically.
+    pub fn auto_layout(&self) -> Option<&Layout> {
+        match self {
+            FileFormat::Layout(l) if l.origin == layout::Origin::Auto => Some(l),
+            _ => None,
+        }
+    }
+}
+
+impl From<LogFormat> for FileFormat {
+    fn from(f: LogFormat) -> Self {
+        FileFormat::Builtin(f)
     }
 }
 
@@ -305,8 +340,15 @@ pub trait LineParser {
     fn parse_line(&mut self, line: &str) -> Option<ParsedEvent>;
 }
 
-/// Build the parser for a format.
-pub fn parser_for(format: LogFormat, ctx: ParseContext) -> Box<dyn LineParser> {
+/// Build the parser for a file format.
+pub fn parser_for(format: &FileFormat, ctx: ParseContext) -> Box<dyn LineParser> {
+    match format {
+        FileFormat::Builtin(f) => builtin_parser(*f, ctx),
+        FileFormat::Layout(l) => Box::new(layout::LayoutParser::new(Arc::clone(l), ctx)),
+    }
+}
+
+fn builtin_parser(format: LogFormat, ctx: ParseContext) -> Box<dyn LineParser> {
     match format {
         LogFormat::Syslog => Box::new(syslog::SyslogParser::new(ctx, false)),
         LogFormat::AppLog => Box::new(syslog::SyslogParser::new(ctx, true)),
@@ -378,6 +420,40 @@ pub fn sniff_format(sample: &[String], hints: &PathHints) -> Option<LogFormat> {
     }
     let (format, n) = best?;
     if n * 2 >= total { Some(format) } else { None }
+}
+
+/// Pick how a file is read (amendment A21): a custom format that applies to the file and matches
+/// the sample (with `files:`, one matching line is enough; otherwise at least half of them), then
+/// the built-in formats ([`sniff_format`]), then an access log layout worked out from the lines.
+/// `None` means "not a log we parse".
+pub fn detect_format(
+    sample: &[String],
+    hints: &PathHints,
+    path: &Path,
+    custom: &FormatRegistry,
+) -> Option<FileFormat> {
+    let candidates: Vec<&str> = sample
+        .iter()
+        .map(String::as_str)
+        .filter(|l| !l.trim().is_empty() && !is_continuation_like(l))
+        .collect();
+    let total = candidates.len();
+    for format in &custom.formats {
+        if !format.applies_to(path) {
+            continue;
+        }
+        let n = candidates.iter().filter(|l| format.matches(l)).count();
+        if n > 0 && (format.has_file_filter() || n * 2 >= total) {
+            return Some(FileFormat::Layout(Arc::clone(format)));
+        }
+    }
+    if let Some(f) = sniff_format(sample, hints) {
+        return Some(FileFormat::Builtin(f));
+    }
+    if total == 0 {
+        return None;
+    }
+    layout::infer_access_layout(&candidates, hints.product).map(|l| FileFormat::Layout(Arc::new(l)))
 }
 
 /// Build the event for a line that is not an entry of its format.
@@ -517,5 +593,66 @@ mod tests {
         }
         let hints = path_hints(Path::new("/var/log/apache2/error.log"));
         assert_eq!(sniff_format(&sample, &hints), Some(LogFormat::ApacheError));
+    }
+
+    fn sample(lines: &[&str]) -> Vec<String> {
+        lines.iter().map(|l| l.to_string()).collect()
+    }
+
+    const COMBINED: &str =
+        r#"192.0.2.1 - - [24/Oct/2026:15:35:32 +0000] "GET / HTTP/1.1" 200 5 "-" "curl/8.5.0""#;
+
+    #[test]
+    fn custom_formats_come_first_then_built_in_then_detected_layouts() {
+        let custom = FormatRegistry::parse(
+            "formats:\n  - name: pinned\n    nginx: '$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\"'\n    files: ['pinned*.log']\n",
+        )
+        .unwrap();
+        let none = FormatRegistry::default();
+        let lines = sample(&[COMBINED, COMBINED]);
+        let path = Path::new("/var/log/nginx/pinned-access.log");
+        let hints = path_hints(path);
+        // a custom format for this file wins over the built-in combined format
+        let f = detect_format(&lines, &hints, path, &custom).unwrap();
+        assert_eq!(f.name(), "custom:pinned");
+        assert!(f.auto_layout().is_none());
+        // other files keep the built-in format
+        let other = Path::new("/var/log/nginx/access.log");
+        let f = detect_format(&lines, &path_hints(other), other, &custom).unwrap();
+        assert_eq!(f.name(), "access");
+        // a layout the built-in formats do not know is detected
+        let split = sample(&[
+            r#"192.0.2.10 [24/Oct/2026:15:35:32 +0000] www.example.com POST "/" 200 12 "Mozilla/5.0 (X11)""#,
+            r#"192.0.2.11 [24/Oct/2026:15:35:33 +0000] www.example.com GET "/a" 404 0 "curl/8.5.0""#,
+            r#"192.0.2.12 [24/Oct/2026:15:35:34 +0000] www.example.com GET "/b" 200 99 "Mozilla/5.0 (X11)""#,
+        ]);
+        let f = detect_format(&split, &hints, other, &none).unwrap();
+        assert_eq!(f.name(), "access-auto");
+        assert!(f.auto_layout().is_some());
+        // and anything else is not a log
+        assert!(detect_format(&sample(&["hello", "world"]), &hints, other, &none).is_none());
+        assert!(detect_format(&sample(&[]), &PathHints::default(), other, &none).is_none());
+    }
+
+    #[test]
+    fn a_custom_format_without_files_needs_half_of_the_sample() {
+        let custom = FormatRegistry::parse(
+            "formats:\n  - name: kv\n    regex: '^status=(?P<status>\\d+) ip=(?P<remote_addr>\\S+)$'\n",
+        )
+        .unwrap();
+        let path = Path::new("/srv/app/requests.txt");
+        let hints = path_hints(path);
+        let half = sample(&[
+            "status=200 ip=192.0.2.1",
+            "noise",
+            "status=404 ip=192.0.2.2",
+            "noise",
+        ]);
+        assert_eq!(
+            detect_format(&half, &hints, path, &custom).unwrap().name(),
+            "custom:kv"
+        );
+        let few = sample(&["status=200 ip=192.0.2.1", "noise", "noise", "noise"]);
+        assert!(detect_format(&few, &hints, path, &custom).is_none());
     }
 }

@@ -1,0 +1,8 @@
+[24/Oct/2026:15:35:20 +0000] 198.51.100.7 www.example.com GET / HTTP/2.0 200 6529 0.120 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+[24/Oct/2026:15:35:21 +0000] 198.51.100.7 www.example.com GET /static/app.css HTTP/2.0 304 0 0.000 "https://www.example.com/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+[24/Oct/2026:15:35:32 +0000] 192.0.2.10 www.example.com POST /?q0000000=v&q0000001=v&q0000002=v&q0000003=v&q0000004=v HTTP/2.0 200 149 0.512 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+[24/Oct/2026:15:35:33 +0000] 203.0.113.5 www.example.com GET /login.php HTTP/2.0 200 4521 0.040 "https://www.example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+[24/Oct/2026:15:35:35 +0000] 192.0.2.10 www.example.com POST /?q0000000=v&q0000001=v&q0000002=v&q0000003=v&q0000004=v HTTP/2.0 200 149 0.498 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+[24/Oct/2026:15:35:36 +0000] 192.0.2.99  GET - HTTP/1.1 400 157 0.000 "-" "-"
+[24/Oct/2026:15:35:37 +0000] 192.0.2.10 www.example.com POST /?q0000000=v&q0000001=v&q0000002=v&q0000003=v&q0000004=v HTTP/2.0 200 149 0.520 "-" "Mozilla/5.0 (X11; Linux x86_64)"
+[24/Oct/2026:15:36:02 +0000] 198.51.100.7 www.example.com POST /api/cart.php HTTP/2.0 200 87 0.210 "https://www.example.com/cart" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"

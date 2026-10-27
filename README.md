@@ -46,6 +46,10 @@ honeypot evidence of confirmed remote code execution.
   vsftpd and ClamAV logs, Apache / nginx access logs (common, combined, vhost_combined, JSON lines),
   Apache 2.2/2.4 and nginx error logs, PHP error logs and php-fpm logs. PHP engine messages are
   recognised wherever they appear (Apache error log, nginx FastCGI stderr, php-fpm, syslog).
+- **Custom formats**: access logs written with a custom nginx `log_format` or Apache `LogFormat`
+  are recognized automatically, and any other layout can be described in
+  `config/custom_log_formats.yaml` as an nginx format, an Apache format or a regex
+  ([Custom log formats](#custom-log-formats)).
 - **Output**: a colored timeline on the terminal (timestamp, rule title, level, log source, log
   file, line number, details), and CSV / JSON / JSONL files with everything a DFIR report needs: MITRE ATT&CK
   tactics and techniques, every parsed field, rule file and ID, log file and line number. Profiles
@@ -120,7 +124,9 @@ Input:
   -f, --file <FILE>         File path to one log file
   -l, --live-analysis       Analyze the local log files that the loaded rules need (/var/log, journalctl)
       --log-format <FORMAT> Force the log format of every input file instead of detecting it: syslog,
-                            applog, access, access-json, apache-error, nginx-error, php-error, php-fpm
+                            applog, access, access-json, apache-error, nginx-error, php-error, php-fpm,
+                            or the name of a custom format
+      --custom-formats <FILE>  Custom log format definitions (default: config/custom_log_formats.yaml)
 
 General Options:
   -r, --rules <DIR/FILE>    Specify a custom rule directory or file (default: ./rules)
@@ -172,6 +178,96 @@ Access logs, ISO syslog lines and PHP error log lines with a zone token (`[24-Oc
 carry their own zone and are used as written; PHP lines without one are read with `-z` too.
 Output is local time by default, UTC with `-U`. RFC 3164 lines also lack a year: the year of the
 file's modification time is assumed, minus one for lines that would otherwise be in the future.
+
+### Custom log formats
+
+Iwatobi works out the format of every file by itself. Besides the built-in formats listed under
+[Features](#-features), it handles logs whose layout was customized:
+
+**Access logs in other layouts are detected automatically.** Sites often change nginx's
+`log_format` or Apache's `LogFormat`: the virtual host goes first, the request is split into
+method, URL and protocol, response times are added. When a file is in none of the built-in formats,
+Iwatobi reads its first lines and works out what each column holds: the time
+(`[24/Oct/2026:15:35:32 +0000]`, ISO 8601 or epoch seconds), the request (a quoted request line, or
+method, URL and protocol), the status, the client IP, the referer, the user agent, the bytes sent and
+the virtual host. A layout is used only when it has at least a time, a request, a status, a client
+IP and a user agent, and nearly all sampled lines fit it. The columns get the same Sigma web server
+field names as the built-in access logs (`c-ip`, `cs-method`, `cs-uri-query`, `sc-status`, ...), so
+every `webserver` rule applies; other columns are kept in `Details` as `field<N>` (N = the column
+number).
+
+After the scan, every detected layout is printed as an nginx `log_format`:
+
+```
+Access log layout detected automatically: 12 files
+    [$time_local] $remote_addr $host $request_method $request_uri $server_protocol $status $body_bytes_sent $field9 "$http_referer" "$http_user_agent"
+```
+
+Check it once. If a column is wrong, or to give the `field<N>` columns names, copy the layout into
+`config/custom_log_formats.yaml` as an nginx format and correct it (`$field9` → `$request_time`).
+
+**Other layouts are described in `config/custom_log_formats.yaml`.** Files that no format matches
+are skipped, and the scan ends with a warning such as `3 files were skipped because the log format
+was not recognized`; `-v` lists them. Each entry has a `name` and one of:
+
+| Key | Value |
+| --- | --- |
+| `nginx` | an nginx `log_format` string, or the whole `log_format` directive from `nginx.conf` |
+| `apache` | an Apache `LogFormat` string, or the whole `LogFormat` directive |
+| `regex` | a regular expression with one named group per field: `(?P<name>...)` |
+
+and optionally:
+
+| Key | Value |
+| --- | --- |
+| `files` | file name patterns (`*`, `?`, `[abc]`) the format is used for; a pattern with `/` is matched against the whole path. Without `files`, the format is tried on every file and used when it matches at least half of its first lines |
+| `time_format` | the time format in [chrono strftime](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) syntax (ex: `'%Y-%m-%d %H:%M:%S'`). Without it, CLF, ISO 8601 and epoch times are read. Times without a zone are read in the zone given with `-z` |
+| `logsource` | (`regex` only) the Sigma logsource of the log, default `{category: webserver}`. Ex: `{product: linux, service: auth}`, `{product: apache, service: error}` |
+
+```yaml
+formats:
+  # copied from nginx.conf
+  - name: shop-nginx
+    nginx: |
+      log_format shop '$remote_addr [$time_local] "$request" '
+                      '$status $body_bytes_sent $request_time';
+    files: ['shop-access.log*']
+
+  # Apache: a date and time without a zone (read with -z)
+  - name: intranet-apache
+    apache: '%{%Y-%m-%d %H:%M:%S}t %h "%r" %>s %b "%{User-Agent}i" %D'
+    files: ['intranet*.log']
+
+  # not a web server log: a regex and its logsource
+  - name: vpnd
+    regex: '^(?P<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (?P<hostname>\S+) (?P<process>[\w-]+)\[(?P<pid>\d+)\]: (?P<message>.*)$'
+    time_format: '%Y-%m-%d %H:%M:%S'
+    logsource: {product: linux, service: sshd}
+    files: ['vpnd*.log']
+```
+
+Web server formats (`nginx`, `apache`, and `regex` with a `webserver` logsource) map these names to
+the Sigma fields; any other variable or group keeps its own name in `Details`:
+
+| nginx variable / regex group | Apache | Sigma field |
+| --- | --- | --- |
+| `remote_addr`, `client_ip` | `%h`, `%a` | `c-ip` |
+| `request` (`GET /x HTTP/1.1`) | `%r` | `cs-method`, `cs-uri-query`, `cs-version` |
+| `request_method` | `%m` | `cs-method` |
+| `request_uri` (or `uri` + `args`) | `%U%q` | `cs-uri-query`, `cs-uri-stem` |
+| `server_protocol` | `%H` | `cs-version` |
+| `status` | `%s`, `%>s` | `sc-status` |
+| `body_bytes_sent`, `bytes_sent` | `%b`, `%B`, `%O` | `sc-bytes` |
+| `http_referer` | `%{Referer}i` | `cs-referer` |
+| `http_user_agent` | `%{User-Agent}i` | `cs-user-agent` |
+| `host`, `http_host`, `server_name` | `%v`, `%V` | `cs-host` |
+| `remote_user` | `%u` | `cs-username` |
+| `time_local`, `time_iso8601`, `msec`, `time`, `timestamp` | `%t`, `%{format}t` | the event time |
+
+In a `regex`, write the Sigma field names with `_` for `-` (`c_ip`, `cs_method`, `sc_status`): group
+names cannot contain `-`. A custom format is also a `--log-format` value (`--log-format shop-nginx`)
+and its name is shown with `-v` (`custom:shop-nginx`; detected layouts show `access-auto`). Use
+`--custom-formats <FILE>` to read the definitions from another file.
 
 ### Output profiles
 

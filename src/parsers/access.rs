@@ -140,7 +140,7 @@ const USERNAME_ALIASES: &[&str] = &[
     "auth_user",
 ];
 /// Timestamp keys, tried in this order (design §4.3 / amendment A7).
-const TIME_KEYS: &[&str] = &[
+pub(super) const TIME_KEYS: &[&str] = &[
     "ts",
     "time",
     "timestamp",
@@ -172,12 +172,34 @@ pub fn matches_json_entry(line: &str) -> bool {
 }
 
 /// Tags every event of an access log carries besides `WEBSERVER` (amendment A9).
-fn product_tags(product: Option<&str>) -> Vec<LogSourceTag> {
+pub(super) fn product_tags(product: Option<&str>) -> Vec<LogSourceTag> {
     match product {
         Some("apache") => vec![LogSourceTag::APACHE_WEBSERVER, LogSourceTag::APACHE_ACCESS],
         Some("nginx") => vec![LogSourceTag::NGINX_WEBSERVER, LogSourceTag::NGINX_ACCESS],
         _ => Vec::new(),
     }
+}
+
+/// Whether `key` is a name the taxonomy mapping or the timestamp reads (an alias, `request`, a
+/// time key).
+fn is_mapped_key(key: &str) -> bool {
+    [
+        C_IP_ALIASES,
+        METHOD_ALIASES,
+        TARGET_ALIASES,
+        QUERY_ALIASES,
+        VERSION_ALIASES,
+        STATUS_ALIASES,
+        BYTES_ALIASES,
+        REFERER_ALIASES,
+        UA_ALIASES,
+        HOST_ALIASES,
+        USERNAME_ALIASES,
+        TIME_KEYS,
+        &["request"],
+    ]
+    .iter()
+    .any(|aliases| aliases.iter().any(|a| a.eq_ignore_ascii_case(key)))
 }
 
 /// Whether `key` is one of the 13 taxonomy keys this module owns.
@@ -194,16 +216,16 @@ fn is_taxonomy_key(key: &str) -> bool {
 
 /// The parts of a CLF request line `METHOD TARGET VERSION`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct RequestLine {
-    method: Option<String>,
-    target: Option<String>,
-    version: Option<String>,
+pub(super) struct RequestLine {
+    pub(super) method: Option<String>,
+    pub(super) target: Option<String>,
+    pub(super) version: Option<String>,
 }
 
 /// Split a request line on spaces: the first token is the method if it is all uppercase
 /// letters, the last token is the version if it looks like `HTTP/1.1`, and whatever remains,
 /// rejoined with single spaces, is the target. `-` and an empty string give no parts at all.
-fn parse_request_line(req: &str) -> RequestLine {
+pub(super) fn parse_request_line(req: &str) -> RequestLine {
     let mut tokens: Vec<&str> = req.split(' ').filter(|t| !t.is_empty()).collect();
     if tokens.is_empty() || (tokens.len() == 1 && tokens[0] == "-") {
         return RequestLine::default();
@@ -222,12 +244,12 @@ fn parse_request_line(req: &str) -> RequestLine {
 }
 
 /// `^[A-Z]+$`
-fn is_http_method(token: &str) -> bool {
+pub(super) fn is_http_method(token: &str) -> bool {
     !token.is_empty() && token.bytes().all(|b| b.is_ascii_uppercase())
 }
 
 /// `^HTTP/\d(\.\d)?$`
-fn is_http_version(token: &str) -> bool {
+pub(super) fn is_http_version(token: &str) -> bool {
     let Some(rest) = token.strip_prefix("HTTP/") else {
         return false;
     };
@@ -246,7 +268,7 @@ fn uri_stem(target: &str) -> &str {
 /// Undo the escaping Apache and nginx apply inside quoted fields for the two characters that
 /// would otherwise break the quoting: `\"` → `"` and `\\` → `\`. Other escapes (`\xHH`, `\n`)
 /// are kept verbatim so that control characters never reach the output.
-fn unescape_quoted(s: &str) -> Cow<'_, str> {
+pub(super) fn unescape_quoted(s: &str) -> Cow<'_, str> {
     if !s.contains('\\') {
         return Cow::Borrowed(s);
     }
@@ -454,7 +476,10 @@ fn lookup<'a>(fields: &'a [(String, FieldValue)], aliases: &[&str]) -> Looked<'a
 }
 
 /// The exact (case-insensitive) key, if present.
-fn exact_field<'a>(fields: &'a [(String, FieldValue)], key: &str) -> Option<&'a FieldValue> {
+pub(super) fn exact_field<'a>(
+    fields: &'a [(String, FieldValue)],
+    key: &str,
+) -> Option<&'a FieldValue> {
     fields
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case(key))
@@ -511,7 +536,7 @@ fn integral(f: f64) -> Option<i64> {
 /// RFC 3339 / ISO 8601 with a zone, epoch seconds/milliseconds/microseconds, and ISO without a
 /// zone (resolved in the assumed zone). Returns the instant, whether the text carried its own
 /// zone, and how a naive time was resolved.
-fn parse_time_text(
+pub(super) fn parse_time_text(
     s: &str,
     tz: &TzAssumption,
 ) -> Option<(DateTime<FixedOffset>, bool, Resolution)> {
@@ -598,7 +623,7 @@ fn combine_date_time(
 }
 
 /// Record (once per file) that a zone-less timestamp was ambiguous or fell in a DST gap.
-fn warn_resolution(ctx: &ParseContext, warned: &mut bool, res: Resolution) {
+pub(super) fn warn_resolution(ctx: &ParseContext, warned: &mut bool, res: Resolution) {
     if *warned {
         return;
     }
@@ -857,25 +882,41 @@ fn flatten(object: &[(String, Json)], prefix: &str, out: &mut Vec<(String, Field
     }
 }
 
-pub struct AccessJsonParser {
+/// Turns the named fields of one access record (a JSON line, or the captures of a custom or
+/// detected text layout) into a `webserver` event: the taxonomy keys mapped through the alias
+/// tables, then every other field under its own name.
+pub(super) struct RecordBuilder {
     ctx: ParseContext,
     tags: Vec<LogSourceTag>,
     last_ts: Option<DateTime<FixedOffset>>,
     warned_resolution: bool,
+    /// A chrono `strftime` format for the time field (custom formats); otherwise any timestamp
+    /// shape [`parse_time_text`] knows is accepted.
+    time_format: Option<String>,
+    /// A text layout (custom format or detected layout): its column names come from the layout,
+    /// not the log, so the columns already mapped to the taxonomy and the time are not repeated,
+    /// and `-` (or nothing), how such logs write an absent value, becomes `Null`.
+    text_layout: bool,
 }
 
-impl AccessJsonParser {
-    pub fn new(ctx: ParseContext) -> Self {
-        let tags = product_tags(ctx.hints.product);
+impl RecordBuilder {
+    pub(super) fn new(
+        ctx: ParseContext,
+        tags: Vec<LogSourceTag>,
+        time_format: Option<String>,
+        text_layout: bool,
+    ) -> Self {
         Self {
             ctx,
             tags,
             last_ts: None,
             warned_resolution: false,
+            time_format,
+            text_layout,
         }
     }
 
-    fn continuation(&self, line: &str) -> ParsedEvent {
+    pub(super) fn continuation(&self, line: &str) -> ParsedEvent {
         let mut ev = continuation_event(line, &LogSourceTag::WEBSERVER, &self.tags, self.last_ts);
         self.ctx.finish(&mut ev);
         ev
@@ -883,51 +924,20 @@ impl AccessJsonParser {
 
     /// The record's timestamp from the first `TIME_KEYS` entry that parses, and whether it
     /// carried its own zone.
-    fn json_timestamp(
+    fn timestamp(
         &mut self,
         fields: &[(String, FieldValue)],
     ) -> Option<(DateTime<FixedOffset>, bool)> {
-        for key in TIME_KEYS {
-            let Some(value) = exact_field(fields, key) else {
-                continue;
-            };
-            let parsed = match value {
-                FieldValue::Int(i) => timestamp::parse_epoch(*i as f64)
-                    .map(|dt| (dt.fixed_offset(), true, Resolution::Exact)),
-                FieldValue::Float(f) => timestamp::parse_epoch(*f)
-                    .map(|dt| (dt.fixed_offset(), true, Resolution::Exact)),
-                FieldValue::Str(s) => parse_time_text(s, &self.ctx.tz).or_else(|| {
-                    if key.eq_ignore_ascii_case("date") {
-                        combine_date_time(s, fields, &self.ctx.tz)
-                    } else {
-                        None
-                    }
-                }),
-                FieldValue::Bool(_) | FieldValue::Null => None,
-            };
-            if let Some((dt, explicit, res)) = parsed {
-                warn_resolution(&self.ctx, &mut self.warned_resolution, res);
-                return Some((dt, explicit));
-            }
-        }
-        None
+        let parsed = record_timestamp(fields, &self.ctx.tz, self.time_format.as_deref());
+        let (dt, explicit, res) = parsed?;
+        warn_resolution(&self.ctx, &mut self.warned_resolution, res);
+        Some((dt, explicit))
     }
-}
 
-impl LineParser for AccessJsonParser {
-    fn parse_line(&mut self, line: &str) -> Option<ParsedEvent> {
-        if line.trim().is_empty() {
-            return None;
-        }
-        let Some(object) = parse_json_object(line) else {
-            return Some(self.continuation(line));
-        };
-        let mut fields = Vec::with_capacity(object.len() + 8);
-        flatten(&object, "", &mut fields);
-
+    pub(super) fn event(&mut self, line: &str, fields: Vec<(String, FieldValue)>) -> ParsedEvent {
         let mut ev = ParsedEvent::new(line, &LogSourceTag::WEBSERVER);
         ev.add_tags(&self.tags);
-        match self.json_timestamp(&fields) {
+        match self.timestamp(&fields) {
             Some((dt, explicit)) => {
                 ev.timestamp = Some(dt);
                 ev.tz_explicit = explicit;
@@ -941,7 +951,7 @@ impl LineParser for AccessJsonParser {
         Taxonomy::from_json(&fields).push_into(&mut ev);
         for (key, value) in fields {
             // The taxonomy owns these names; a record that already uses them was mapped above.
-            if !is_taxonomy_key(&key) {
+            if !is_taxonomy_key(&key) && !(self.text_layout && is_mapped_key(&key)) {
                 // The other numeric taxonomy fields of A2 are numbers even when the log format
                 // quotes them (nginx `escape=json`), so `s-port: 443` matches.
                 let value = match &value {
@@ -949,13 +959,102 @@ impl LineParser for AccessJsonParser {
                         .trim()
                         .parse::<i64>()
                         .map_or(value.clone(), FieldValue::Int),
+                    FieldValue::Str(s) if self.text_layout && (s.is_empty() || s == "-") => {
+                        FieldValue::Null
+                    }
                     _ => value,
                 };
                 ev.push(&key, value);
             }
         }
         self.ctx.finish(&mut ev);
-        Some(ev)
+        ev
+    }
+}
+
+/// The timestamp of a record of named fields: the first `TIME_KEYS` entry that parses (with
+/// `time_format` when one is given), the instant, whether it carried its own zone, and how a
+/// naive time was resolved.
+pub(super) fn record_timestamp(
+    fields: &[(String, FieldValue)],
+    tz: &TzAssumption,
+    time_format: Option<&str>,
+) -> Option<(DateTime<FixedOffset>, bool, Resolution)> {
+    for key in TIME_KEYS {
+        let Some(value) = exact_field(fields, key) else {
+            continue;
+        };
+        let parsed = match value {
+            FieldValue::Int(i) => timestamp::parse_epoch(*i as f64)
+                .map(|dt| (dt.fixed_offset(), true, Resolution::Exact)),
+            FieldValue::Float(f) => {
+                timestamp::parse_epoch(*f).map(|dt| (dt.fixed_offset(), true, Resolution::Exact))
+            }
+            FieldValue::Str(s) => match time_format {
+                Some(format) => parse_time_with_format(s, format, tz),
+                None => parse_time_text(s, tz).or_else(|| {
+                    if key.eq_ignore_ascii_case("date") {
+                        combine_date_time(s, fields, tz)
+                    } else {
+                        None
+                    }
+                }),
+            },
+            FieldValue::Bool(_) | FieldValue::Null => None,
+        };
+        if parsed.is_some() {
+            return parsed;
+        }
+    }
+    None
+}
+
+/// Parse `s` with a chrono `strftime` format: with a zone (`%z`, `%:z`) the time is exact,
+/// without one it is resolved in the assumed zone, and a date-only format means midnight.
+pub(super) fn parse_time_with_format(
+    s: &str,
+    format: &str,
+    tz: &TzAssumption,
+) -> Option<(DateTime<FixedOffset>, bool, Resolution)> {
+    let t = s.trim();
+    if let Ok(dt) = DateTime::parse_from_str(t, format) {
+        return Some((dt, true, Resolution::Exact));
+    }
+    let naive = chrono::NaiveDateTime::parse_from_str(t, format)
+        .ok()
+        .or_else(|| {
+            NaiveDate::parse_from_str(t, format)
+                .ok()
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+        })?;
+    let (dt, res) = timestamp::resolve_naive(naive, tz);
+    Some((dt, false, res))
+}
+
+pub struct AccessJsonParser {
+    builder: RecordBuilder,
+}
+
+impl AccessJsonParser {
+    pub fn new(ctx: ParseContext) -> Self {
+        let tags = product_tags(ctx.hints.product);
+        Self {
+            builder: RecordBuilder::new(ctx, tags, None, false),
+        }
+    }
+}
+
+impl LineParser for AccessJsonParser {
+    fn parse_line(&mut self, line: &str) -> Option<ParsedEvent> {
+        if line.trim().is_empty() {
+            return None;
+        }
+        let Some(object) = parse_json_object(line) else {
+            return Some(self.builder.continuation(line));
+        };
+        let mut fields = Vec::with_capacity(object.len() + 8);
+        flatten(&object, "", &mut fields);
+        Some(self.builder.event(line, fields))
     }
 }
 

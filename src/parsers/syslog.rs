@@ -2304,13 +2304,16 @@ mod tests {
 
     #[test]
     fn parser_for_dispatches_both_formats() {
-        let mut p = parser_for(LogFormat::Syslog, ctx_for("/var/log/syslog", jst()));
+        let mut p = parser_for(&LogFormat::Syslog.into(), ctx_for("/var/log/syslog", jst()));
         let ev = p
             .parse_line("Oct 26 17:39:01 host sshd[1]: m")
             .expect("entry");
         assert_eq!(ev.primary_logsource, "linux/sshd");
         assert_eq!(ts(&ev), "2026-10-26T17:39:01+09:00");
-        let mut p = parser_for(LogFormat::AppLog, ctx_for("/var/log/vsftpd.log", jst()));
+        let mut p = parser_for(
+            &LogFormat::AppLog.into(),
+            ctx_for("/var/log/vsftpd.log", jst()),
+        );
         let ev = p
             .parse_line("Sun Oct 26 17:39:01 2026 [pid 1] [u] OK LOGIN: Client \"1.2.3.4\"")
             .expect("entry");

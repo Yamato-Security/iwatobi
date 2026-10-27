@@ -5,7 +5,7 @@
 //! with a warning in the error log.
 
 use crate::logsource::LogSourceTag;
-use crate::parsers::LogFormat;
+use crate::parsers::FileFormat;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
@@ -17,8 +17,8 @@ pub struct ScanTarget {
     pub display_name: String,
     /// Tags added to every event of this target (live analysis: a path the user named for a logsource).
     pub extra_tags: Vec<LogSourceTag>,
-    /// A forced format (`--log-format`), otherwise sniffed.
-    pub format: Option<LogFormat>,
+    /// A forced format (`--log-format`), otherwise detected.
+    pub format: Option<FileFormat>,
 }
 
 impl ScanTarget {
@@ -59,7 +59,7 @@ impl std::fmt::Display for SkipReason {
 }
 
 /// Enumerate the files under `-d` (recursively) or the single `-f` file.
-pub fn enumerate(path: &Path, forced_format: Option<LogFormat>) -> Vec<ScanTarget> {
+pub fn enumerate(path: &Path, forced_format: Option<FileFormat>) -> Vec<ScanTarget> {
     let mut out = Vec::new();
     if path.is_file() {
         let mut t = ScanTarget::new(path);
@@ -72,7 +72,7 @@ pub fn enumerate(path: &Path, forced_format: Option<LogFormat>) -> Vec<ScanTarge
     walk(path, &mut out, &mut seen_dirs, &mut seen_files);
     out.sort_by(|a, b| a.path.cmp(&b.path));
     for t in &mut out {
-        t.format = forced_format;
+        t.format = forced_format.clone();
     }
     out
 }

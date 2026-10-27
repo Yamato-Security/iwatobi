@@ -1,0 +1,58 @@
+# Custom log formats.
+#
+# Iwatobi recognizes syslog, Apache/nginx access logs (common, combined, vhost_combined, JSON lines),
+# Apache/nginx error logs, PHP error logs and php-fpm logs by itself, and works out the layout of most
+# other web server access logs automatically. Describe a log here when it is skipped as
+# "unrecognized log format", or to pin or correct a layout that was detected automatically.
+#
+# Each format needs a unique name and exactly one of:
+#
+#   nginx:  an nginx log_format string, or the whole log_format directive from nginx.conf
+#   apache: an Apache LogFormat string, or the whole LogFormat directive from the Apache config
+#   regex:  a regular expression with named groups, one per field: (?P<name>...)
+#
+# Optional settings:
+#
+#   files:       file name patterns (* ? [abc]) the format is used for. Without them, the format is
+#                tried on every file whose format is not forced with --log-format, before the
+#                built-in formats, and used when it matches at least half of the first lines.
+#                A pattern with a / is matched against the whole path.
+#   time_format: the format of the time field in chrono strftime syntax (ex: '%Y-%m-%d %H:%M:%S').
+#                Without it, CLF ([10/Oct/2026:13:55:36 +0900]), ISO 8601 and epoch times are read.
+#                Times without a zone are read in the zone given with -z.
+#   logsource:   (regex only) the Sigma logsource of the log, default {category: webserver}.
+#                Ex: {product: linux, service: auth}, {product: apache, service: error}.
+#
+# Web server access logs (nginx, apache, and regex formats with the webserver logsource) are mapped
+# to the Sigma webserver fields. These variable / group names are recognized:
+#
+#   remote_addr, client_ip   -> c-ip              request_method -> cs-method
+#   request_uri, uri + args  -> cs-uri-query      request (GET /x HTTP/1.1) -> method, URI, version
+#   server_protocol          -> cs-version        status         -> sc-status
+#   body_bytes_sent, bytes_sent -> sc-bytes       http_referer   -> cs-referer
+#   http_user_agent          -> cs-user-agent     host, http_host, server_name -> cs-host
+#   remote_user              -> cs-username
+#   time_local, time_iso8601, msec, time, timestamp -> the event time
+#
+# Any other variable or group is kept under its own name and shown in Details. In a regex, write
+# the taxonomy names with _ instead of - (c_ip, cs_method, sc_status, ...).
+#
+# Examples:
+#
+# formats:
+#   # An nginx log_format (paste it from nginx.conf; the whole log_format directive works too)
+#   - name: shop-nginx
+#     nginx: '$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_time $upstream_response_time'
+#     files: ['shop-access.log*']
+#
+#   # An Apache LogFormat
+#   - name: intranet-apache
+#     apache: '%v %h %l %u %t "%r" %>s %b "%{Referer}i" "%{User-Agent}i" %D'
+#
+#   # Any other log: a regex and its Sigma logsource
+#   - name: vpn-auth
+#     regex: '^(?P<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (?P<hostname>\S+) vpnd: (?P<message>.*)$'
+#     time_format: '%Y-%m-%d %H:%M:%S'
+#     logsource: {product: linux, service: auth}
+
+formats:

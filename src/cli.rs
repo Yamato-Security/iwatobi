@@ -56,17 +56,17 @@ fn parse_tz(s: &str) -> Result<TzAssumption, String> {
     s.parse::<TzAssumption>()
 }
 
-fn parse_log_format(s: &str) -> Result<LogFormat, String> {
-    LogFormat::from_name(s).ok_or_else(|| {
-        format!(
-            "'{s}' is not a log format. Valid values: {}",
-            LogFormat::ALL
-                .iter()
-                .map(|f| f.name())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    })
+/// The text of the "not a log format" error: the built-in names and the custom ones.
+pub fn log_format_error(name: &str, custom: &[String]) -> String {
+    let mut valid: Vec<String> = LogFormat::ALL
+        .iter()
+        .map(|f| f.name().to_string())
+        .collect();
+    valid.extend(custom.iter().cloned());
+    format!(
+        "'{name}' is not a log format. Valid values: {}",
+        valid.join(", ")
+    )
 }
 
 fn parse_level(s: &str) -> Result<String, String> {
@@ -149,9 +149,13 @@ pub struct InputOption {
     pub live_analysis: bool,
 
     /// Force the log format of every input file instead of detecting it: syslog, applog, access,
-    /// access-json, apache-error, nginx-error, php-error, php-fpm
-    #[arg(help_heading = Some("Input"), long = "log-format", value_name = "FORMAT", value_parser = parse_log_format, display_order = 103)]
-    pub log_format: Option<LogFormat>,
+    /// access-json, apache-error, nginx-error, php-error, php-fpm, or the name of a custom format
+    #[arg(help_heading = Some("Input"), long = "log-format", value_name = "FORMAT", display_order = 103)]
+    pub log_format: Option<String>,
+
+    /// Custom log format definitions (default: config/custom_log_formats.yaml)
+    #[arg(help_heading = Some("Input"), long = "custom-formats", value_name = "FILE", display_order = 104)]
+    pub custom_formats: Option<PathBuf>,
 }
 
 #[derive(Args, Clone, Debug, Default)]

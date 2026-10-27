@@ -1,0 +1,20 @@
+# Custom formats for the files under test_files/custom/logs (see config/custom_log_formats.yaml).
+formats:
+  # no user agent: not detected automatically
+  - name: shop-nginx
+    nginx: |
+      log_format shop '$remote_addr [$time_local] "$request" '
+                      '$status $body_bytes_sent $request_time';
+    files: ['shop-access.log*']
+
+  # a split date and time without a zone: not detected automatically
+  - name: intranet-apache
+    apache: '%{%Y-%m-%d %H:%M:%S}t %h "%r" %>s %b "%{User-Agent}i" %D'
+    files: ['intranet*.log']
+
+  # not a web server log
+  - name: vpnd
+    regex: '^(?P<timestamp>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (?P<hostname>\S+) (?P<process>[\w-]+)\[(?P<pid>\d+)\]: (?P<message>.*)$'
+    time_format: '%Y-%m-%d %H:%M:%S'
+    logsource: {product: linux, service: sshd}
+    files: ['vpnd*.log']

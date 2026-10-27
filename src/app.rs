@@ -1,18 +1,19 @@
 //! The `dfir-timeline` command: load rules, find inputs, scan, correlate, write, summarize.
 
-use crate::cli::{TimelineOptions, offset_to_seconds};
+use crate::cli::{self, TimelineOptions, offset_to_seconds};
 use crate::color::IwatobiColor;
 use crate::correlate::{self, BaseHit};
 use crate::detect::{ScanOptions, ScanResult, TimeFilter, scan_lines, scan_target};
 use crate::errorlog::log_warn;
-use crate::input::{self, ScanTarget};
+use crate::input::{self, ScanTarget, SkipReason};
 use crate::live;
 use crate::logsource::LogSourceSpec;
 use crate::output::{
     self, Profile, RenderOptions, Writers, render_correlation, render_detection,
     resolve_output_targets,
 };
-use crate::parsers::{LogFormat, ParseContext};
+use crate::parsers::layout::{self, FormatRegistry};
+use crate::parsers::{FileFormat, LogFormat, ParseContext};
 use crate::rules::{self, RuleFilters, RuleSet};
 use crate::summary::{self, Summary};
 use crate::util::{self, error_msg, fatal_error, p, p_label, warn_msg};
@@ -115,6 +116,33 @@ pub fn run(opts: &TimelineOptions) -> i32 {
                     no_color,
                     "config/profiles.yaml must define the 'standard' and 'verbose' profiles.",
                 );
+                return 1;
+            }
+        },
+    };
+
+    // --- custom log formats --------------------------------------------------------------
+    let custom_formats = match load_custom_formats(opts.input.custom_formats.as_deref()) {
+        Ok(r) => Arc::new(r),
+        Err(e) => {
+            error_msg(no_color, &e);
+            return 1;
+        }
+    };
+    let forced_format = match &opts.input.log_format {
+        None => None,
+        Some(name) => match LogFormat::from_name(name)
+            .map(FileFormat::Builtin)
+            .or_else(|| custom_formats.get(name).map(FileFormat::Layout))
+        {
+            Some(f) => Some(f),
+            None => {
+                let names: Vec<String> = custom_formats
+                    .formats
+                    .iter()
+                    .map(|f| f.name.clone())
+                    .collect();
+                error_msg(no_color, &cli::log_format_error(name, &names));
                 return 1;
             }
         },
@@ -224,7 +252,7 @@ pub fn run(opts: &TimelineOptions) -> i32 {
             }
         }
         for t in &mut targets {
-            t.format = t.format.or(opts.input.log_format);
+            t.format = t.format.clone().or_else(|| forced_format.clone());
         }
         if !skipped_logsources.is_empty() {
             let names: Vec<String> = skipped_logsources
@@ -241,9 +269,9 @@ pub fn run(opts: &TimelineOptions) -> i32 {
             );
         }
     } else if let Some(f) = &opts.input.filepath {
-        targets = input::enumerate(f, opts.input.log_format);
+        targets = input::enumerate(f, forced_format.clone());
     } else if let Some(d) = &opts.input.directory {
-        targets = input::enumerate(d, opts.input.log_format);
+        targets = input::enumerate(d, forced_format.clone());
     }
     if let Some(out) = &opts.output.output {
         let outputs: Vec<std::path::PathBuf> =
@@ -304,6 +332,13 @@ pub fn run(opts: &TimelineOptions) -> i32 {
         drop_rules_for(ruleset, &skipped_logsources)
     };
 
+    if !custom_formats.is_empty() {
+        p_label(
+            no_color,
+            "Custom log formats: ",
+            &util::fmt_num(custom_formats.formats.len()),
+        );
+    }
     p_label(
         no_color,
         "Total log files: ",
@@ -318,12 +353,15 @@ pub fn run(opts: &TimelineOptions) -> i32 {
         tz,
         hostname_hint,
         time_filter,
+        custom_formats,
     };
     let state = Arc::new(Mutex::new(ScanState {
         writers,
         summary: Summary::default(),
         base_hits: Vec::new(),
         mixed_zone_files: 0,
+        unrecognized_files: 0,
+        auto_layouts: BTreeMap::new(),
     }));
     let verbose = opts.general.verbose;
     let single_file = opts.input.filepath.is_some();
@@ -365,7 +403,7 @@ pub fn run(opts: &TimelineOptions) -> i32 {
             path: std::path::PathBuf::from("journalctl"),
             display_name: "journalctl".to_string(),
             extra_tags: Vec::new(),
-            format: Some(LogFormat::Syslog),
+            format: Some(LogFormat::Syslog.into()),
         };
         // Drain stderr on its own thread: a journalctl that writes more than the pipe buffer
         // would otherwise block, and the "not seeing messages" hint is how a partial (non-root)
@@ -386,13 +424,13 @@ pub fn run(opts: &TimelineOptions) -> i32 {
             ctx.hostname_hint = scan_opts.hostname_hint.clone();
             ctx.year_hint = Utc::now().format("%Y").to_string().parse().unwrap_or(2000);
             let mut result = ScanResult {
-                format: Some(LogFormat::Syslog),
+                format: Some(LogFormat::Syslog.into()),
                 ..Default::default()
             };
             // Lossy UTF-8 like the file reader: one odd byte must not end the journal.
             scan_lines(
                 input::Lines::new(stdout).map_while(Result::ok),
-                LogFormat::Syslog,
+                &LogFormat::Syslog.into(),
                 ctx,
                 &target,
                 ruleset_ref,
@@ -468,6 +506,7 @@ pub fn run(opts: &TimelineOptions) -> i32 {
     if let Err(e) = st.writers.finish() {
         fatal_error(no_color, &e);
     }
+    report_formats(&st, no_color);
     if st.mixed_zone_files > 0 && opts.general.timezone.is_none() {
         let msg = "Some logs carry a timezone and others do not; timestamps without one were read as local time. Use -z (ex: -z UTC) if those logs come from another timezone.";
         warn_msg(no_color, msg);
@@ -498,6 +537,10 @@ struct ScanState {
     summary: Summary,
     base_hits: Vec<BaseHit>,
     mixed_zone_files: usize,
+    /// Files skipped because no format matched them.
+    unrecognized_files: usize,
+    /// Automatically detected access log layout (as an nginx `log_format`) → files.
+    auto_layouts: BTreeMap<String, usize>,
 }
 
 impl ScanState {
@@ -507,6 +550,8 @@ impl ScanState {
             summary: Summary::default(),
             base_hits: Vec::new(),
             mixed_zone_files: 0,
+            unrecognized_files: 0,
+            auto_layouts: BTreeMap::new(),
         }
     }
 }
@@ -535,10 +580,76 @@ fn consume_result(
         st.writers.write(row);
     }
     st.base_hits.append(&mut result.base_hits);
+    if result.skipped == Some(SkipReason::UnrecognizedFormat) {
+        st.unrecognized_files += 1;
+    }
+    if let Some(l) = result.format.as_ref().and_then(FileFormat::auto_layout) {
+        *st.auto_layouts.entry(l.display.clone()).or_default() += 1;
+    }
     if result.mixed_zone_sources {
         st.mixed_zone_files += 1;
     }
     st.summary.merge(result.summary);
+}
+
+/// The custom log formats: `--custom-formats FILE`, or `config/custom_log_formats.yaml`.
+fn load_custom_formats(path: Option<&Path>) -> Result<FormatRegistry, String> {
+    let (text, name) = match path {
+        Some(p) => (
+            std::fs::read_to_string(p).map_err(|e| {
+                format!("Could not read the custom log formats {}: {e}", p.display())
+            })?,
+            p.display().to_string(),
+        ),
+        None => (
+            util::asset(
+                "config/custom_log_formats.yaml",
+                layout::DEFAULT_CUSTOM_FORMATS,
+            ),
+            "config/custom_log_formats.yaml".to_string(),
+        ),
+    };
+    FormatRegistry::parse(&text).map_err(|e| format!("{name}: {e}"))
+}
+
+/// After the scan: the access log layouts that were detected automatically (so that a wrong
+/// guess can be seen and corrected) and the files whose format was not recognized.
+fn report_formats(st: &ScanState, no_color: bool) {
+    for (display, files) in &st.auto_layouts {
+        util::p(None, "", true);
+        p_label(
+            no_color,
+            "Access log layout detected automatically: ",
+            &format!(
+                "{} file{}",
+                util::fmt_num(*files),
+                if *files == 1 { "" } else { "s" }
+            ),
+        );
+        p(None, &format!("    {display}"), true);
+        let msg = format!("Access log layout detected automatically ({files} files): {display}");
+        log_warn(&msg);
+    }
+    if !st.auto_layouts.is_empty() {
+        p(
+            None,
+            "If a field is wrong, add the layout to config/custom_log_formats.yaml as an nginx format and correct it (see \"Custom log formats\" in the README).",
+            true,
+        );
+    }
+    if st.unrecognized_files > 0 {
+        util::p(None, "", true);
+        let n = st.unrecognized_files;
+        warn_msg(
+            no_color,
+            &format!(
+                "{} file{} skipped because the log format was not recognized (-v lists them). To scan {}, describe the format in config/custom_log_formats.yaml (see \"Custom log formats\" in the README).",
+                util::fmt_num(n),
+                if n == 1 { " was" } else { "s were" },
+                if n == 1 { "it" } else { "them" },
+            ),
+        );
+    }
 }
 
 fn report_file(target: &ScanTarget, result: &ScanResult, verbose: bool, no_color: bool) {
@@ -556,7 +667,10 @@ fn report_file(target: &ScanTarget, result: &ScanResult, verbose: bool, no_color
         log_warn(&msg);
         warn_msg(no_color, &msg);
     } else if verbose {
-        let fmt = result.format.map(|f| f.name()).unwrap_or("-");
+        let fmt = result
+            .format
+            .as_ref()
+            .map_or_else(|| "-".to_string(), FileFormat::name);
         p(
             None,
             &format!(

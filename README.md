@@ -520,7 +520,7 @@ counts that were derived by hand from the fixture lines.
 ## 🤝 Contributing & License
 
 Bug reports, log samples that do not parse and new rules are welcome as issues and pull requests.
-Iwatobi is released under the [Reciprocal Public License 1.5](LICENSE) (RPL-1.5) and copyright Yamato
-Security. Versions up to 0.1.0 were released under the AGPLv3. The bundled SigmaHQ rules are under the
-[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md), and the test logs under the
+Iwatobi is released under the [Reciprocal Public License 1.5](LICENSE) (RPL-1.5) and copyright Shirofune
+Security Co., Ltd. Versions up to 0.1.0 were released under the AGPLv3. The bundled SigmaHQ rules are under
+the [Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md), and the test logs under the
 licenses listed in [`test_files/README.md`](test_files/README.md).

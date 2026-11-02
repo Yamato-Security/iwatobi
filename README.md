@@ -217,6 +217,80 @@ event). The `EventData` fields keep their names (`Image`, `CommandLine`, `Parent
 `process_creation`, 3 `network_connection`, 5 `process_termination`, 9 `raw_access_thread`, 11
 `file_event`, 23 `file_delete`. The event time is `SystemTime` (UTC).
 
+#### Try it on public auditd and Sysmon for Linux logs
+
+[splunk/attack_data](https://github.com/splunk/attack_data) (Apache License 2.0) publishes logs
+recorded while attack techniques were run on test machines, in one folder per MITRE ATT&CK technique.
+Its Linux files are 162 logs (about 680 MB): Linux audit logs (raw, ENRICHED and `ausearch -i`
+output) and Sysmon for Linux events (one per line, or in syslog). The repository stores its logs with
+[Git LFS](https://git-lfs.com/), so clone it without them and download only the Linux ones. Install
+Git LFS and run `git lfs install` once first:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/splunk/attack_data.git
+git -C attack_data lfs pull --include='*auditd*,*sysmon_linux*,linux_sysmon.log'
+```
+
+This needs about 1.4 GB of disk, because Git LFS also keeps a copy of each log under `.git`. Scan
+`attack_data/datasets`. The other datasets remain small Git LFS pointer files: they and the YAML
+descriptions are skipped as unrecognized, and `-Q` keeps their list out of `logs/`. Use `-z UTC` for
+the `ausearch -i` files, whose times have no zone:
+
+```bash
+# timeline on the terminal (UTC)
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q
+
+# only high and critical alerts, without the summary
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -m high -N
+
+# save sorted CSV and JSONL with the verbose profile (rule, MITRE tags, log file and line)
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -s -o attack-data-timeline -t csv,jsonl
+
+# one technique only (T1574.006: hijacking the dynamic linker with ld.so.preload)
+./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
+```
+
+(`./iwatobi` is the binary from the package, e.g. `./iwatobi-0.1.0-lin-x64-musl`.) A clone of this
+repository also has a small subset of these files, plus synthetic ones, in `test_files/auditd/` and
+`test_files/sysmon-linux/`. [`test_files/README.md`](test_files/README.md) lists where each comes from
+and what it should detect:
+
+```bash
+./iwatobi dfir-timeline -d test_files/auditd -z UTC -U
+./iwatobi dfir-timeline -d test_files/sysmon-linux -z UTC -U
+```
+
+The 162 files hold 717,284 events. With the bundled SigmaHQ `r2026-07-01` rules, Iwatobi reports 771
+detections from 36 rules:
+
+| Rule category | Rules matched | Detections | high | medium | low | informational |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| auditd (`service: auditd`) | 12 | 197 | 175 | 8 | 14 | 0 |
+| Sysmon for Linux `process_creation` | 21 | 525 | 6 | 30 | 108 | 381 |
+| Sysmon for Linux `file_event` | 3 | 49 | 0 | 1 | 48 | 0 |
+| **Total** | **36** | **771** | **181** | **39** | **170** | **381** |
+
+No `network_connection` rule matched these datasets. The detections show the kinds of activity
+Iwatobi finds (detections in parentheses):
+
+- **Credential access:** searching files for passwords with `grep` (166).
+- **Persistence and privilege escalation:** new cron files (44) and `at` jobs (3), changes to
+  `/etc/ld.so.preload` (5), shell scripts written to `/etc/profile.d` (4), services reloaded or started
+  (4), kernel modules loaded with `insmod` (3), setuid capabilities set with `setcap` (2), `doas`
+  configured and used (2), a new user account (1).
+- **Defense evasion and impact:** file deletion (237), programs run from `/tmp` (5), hidden files and
+  paths (6), services stopped (4), `chmod` on sensitive directories (4), changes to sensitive files
+  (4), a disabled firewall (1), a permission change (1).
+- **Execution:** scripts run from suspicious directories (7), shells spawned through `find`, `awk` and
+  `apt` (8), the magic SysRq key (1).
+- **Discovery:** files and directories (91), accounts and groups (56), system information (46),
+  crontabs (32), network connections and configuration (20), sudoers files read (4), remote systems
+  (1).
+- **Command and control and exfiltration:** suspicious C2 activity (6), files split into pieces (3).
+
+These logs come from attack simulations. On a normal server, the discovery and file deletion rules
+also fire on routine administration: `-m medium` keeps only the 220 medium and high detections here.
+
 ### Custom log formats
 
 Iwatobi works out the format of every file by itself. Besides the built-in formats listed under

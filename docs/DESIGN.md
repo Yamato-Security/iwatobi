@@ -468,9 +468,9 @@ host first, the syslog ones as fallback), without the syslog tags. Files with `0
 `config/log_locations.yaml` maps `service: auditd` to `/var/log/audit/audit.log*` and the Sysmon categories to
 syslog; the journal satisfies Sysmon needs but not auditd (`live::is_linux`). Rules: SigmaHQ `r2026-07-01`
 `rules/linux/{auditd,process_creation,network_connection,file_event}` verbatim + `LICENSE.Detection.Rules.md`.
-Validated against Zircolite 4.7.0 on 141 Splunk attack_data files (raw/ENRICHED auditd 79/79 per rule; Sysmon
-equal per rule after restricting Zircolite to each category's event ID, plus one 18-line event Zircolite cannot
-read).
+Validated against Zircolite 4.7.0 on 141 Splunk attack_data files (raw/ENRICHED auditd equal per rule, 66 each,
+except the shutdown rule: Zircolite's 13 matches are `grep` patterns that A23 no longer matches; Sysmon equal per
+rule after restricting Zircolite to each category's event ID, plus one 18-line event Zircolite cannot read).
 
 
 A23. **Auditd argument matching.** Complete EXECVE vectors are ordered by numeric argument index

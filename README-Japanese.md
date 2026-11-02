@@ -221,6 +221,81 @@ Sysmon for Linuxのイベントは、syslogの行（`... sysmon: <Event>...`）�
 `process_creation`、3 `network_connection`、5 `process_termination`、9 `raw_access_thread`、11
 `file_event`、23 `file_delete`。イベントの時刻は`SystemTime`（UTC）です。
 
+#### 公開されているauditdとSysmon for Linuxのログで試す
+
+[splunk/attack_data](https://github.com/splunk/attack_data)（Apache License 2.0）では、テスト用の
+マシンで攻撃手法を実行したときに記録したログが、MITRE ATT&CKのテクニックごとのフォルダで公開されて
+います。Linuxのファイルは162個（約680MB）で、Linuxの監査ログ（raw、ENRICHED、`ausearch -i`の出力）と
+Sysmon for Linuxのイベント（1行に1つ、またはsyslog）です。ログは[Git LFS](https://git-lfs.com/)で
+保存されているため、ログを含めずにクローンしてから、Linuxのログだけをダウンロードしてください。
+事前にGit LFSをインストールし、一度だけ`git lfs install`を実行してください。
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/splunk/attack_data.git
+git -C attack_data lfs pull --include='*auditd*,*sysmon_linux*,linux_sysmon.log'
+```
+
+Git LFSは各ログのコピーを`.git`の下にも保持するため、約1.4GBのディスク容量が必要です。
+`attack_data/datasets`をスキャンしてください。ほかのデータセットは小さなGit LFSのポインタファイルの
+ままです。それらとYAMLの説明ファイルは、フォーマットを認識できないファイルとしてスキップされます。
+`-Q`を付けると、その一覧を`logs/`に保存しません。`ausearch -i`のファイルの時刻にはタイムゾーンが
+ないため、`-z UTC`を指定してください。
+
+```bash
+# ターミナルにタイムラインを表示（UTC）
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q
+
+# highとcriticalのアラートのみ、サマリーなし
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -m high -N
+
+# verboseプロファイル（ルール、MITREタグ、ログファイルと行番号）で、ソートしたCSVとJSONLを保存
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -s -o attack-data-timeline -t csv,jsonl
+
+# 1つのテクニックのみ（T1574.006: ld.so.preloadによるダイナミックリンカの乗っ取り）
+./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
+```
+
+（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-0.1.0-lin-x64-musl`）このリポジトリを
+クローンすると、`test_files/auditd/`と`test_files/sysmon-linux/`に、これらのファイルの一部と合成した
+ファイルも含まれています。各ファイルの出典と検知されるべき内容は
+[`test_files/README.md`](test_files/README.md)に記載しています。
+
+```bash
+./iwatobi dfir-timeline -d test_files/auditd -z UTC -U
+./iwatobi dfir-timeline -d test_files/sysmon-linux -z UTC -U
+```
+
+162個のファイルには717,284件のイベントがあります。同梱のSigmaHQ `r2026-07-01`のルールでは、36個の
+ルールで771件を検知します。
+
+| ルールのカテゴリ | 一致したルール | 検知数 | high | medium | low | informational |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| auditd（`service: auditd`） | 12 | 197 | 175 | 8 | 14 | 0 |
+| Sysmon for Linux `process_creation` | 21 | 525 | 6 | 30 | 108 | 381 |
+| Sysmon for Linux `file_event` | 3 | 49 | 0 | 1 | 48 | 0 |
+| **合計** | **36** | **771** | **181** | **39** | **170** | **381** |
+
+これらのデータセットに一致した`network_connection`のルールはありません。検知結果から、Iwatobiで
+見つけられる活動の種類がわかります（括弧内は検知数）。
+
+- **認証情報へのアクセス:** `grep`によるファイル内のパスワード検索（166）。
+- **永続化と権限昇格:** 新しいcronファイル（44）と`at`ジョブ（3）、`/etc/ld.so.preload`の変更（5）、
+  `/etc/profile.d`へのシェルスクリプトの書き込み（4）、サービスのリロードと起動（4）、`insmod`による
+  カーネルモジュールの読み込み（3）、`setcap`によるsetuidケーパビリティの設定（2）、`doas`の設定と
+  使用（2）、新しいユーザーアカウント（1）。
+- **防御回避と影響:** ファイルの削除（237）、`/tmp`からのプログラムの実行（5）、隠しファイルと
+  隠しパス（6）、サービスの停止（4）、重要なディレクトリに対する`chmod`（4）、重要なファイルの変更（4）、
+  ファイアウォールの無効化（1）、パーミッションの変更（1）。
+- **実行:** 不審なディレクトリにあるスクリプトの実行（7）、`find`、`awk`、`apt`を経由したシェルの起動
+  （8）、Magic SysRqキー（1）。
+- **探索:** ファイルとディレクトリ（91）、アカウントとグループ（56）、システム情報（46）、crontab（32）、
+  ネットワーク接続と設定（20）、sudoersファイルの読み取り（4）、リモートシステム（1）。
+- **C2と持ち出し:** 不審なC2活動（6）、ファイルの分割（3）。
+
+これらのログは攻撃のシミュレーションで記録されたものです。通常のサーバーでは、探索とファイル削除の
+ルールは日常的な管理作業でも検知されます。`-m medium`を指定すると、ここではmediumとhighの220件だけが
+残ります。
+
 ### カスタムログフォーマット（Custom log formats）
 
 Iwatobiは各ファイルのフォーマットを自動的に判別します。[特徴](#-特徴)に挙げた組み込みのフォーマットに

@@ -1,6 +1,6 @@
 [package]
 name = "iwatobi"
-version = "0.1.0"
+version = "1.0.0"
 repository = "https://github.com/Yamato-Security/iwatobi"
 authors = ["Yamato Security @SecurityYamato"]
 description = "Native Sigma scanner and DFIR timeline generator for Linux logs"

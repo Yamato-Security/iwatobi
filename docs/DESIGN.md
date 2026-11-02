@@ -1,9 +1,9 @@
-# Iwatobi design (v0.1.0)
+# Iwatobi design (v1.0.0)
 
 Iwatobi (イワトビ, rockhopper penguin) is Yamato Security's native Sigma scanner for Linux text
 logs: the Hayabusa/Suzaku sibling for syslog-family logs, web server access/error logs and PHP
 logs. Rust binary, AGPL-3.0, repo https://github.com/Yamato-Security/iwatobi (private, currently
-only LICENSE + README). Version `0.1.0`, release name "Vulnpocalypse Release".
+only LICENSE + README). Version `1.0.0`, release name "CODE BLUE Release" (0.1.0: "Vulnpocalypse Release").
 
 Explicitly OUT of scope for 0.1.0: auditd, sysmon-for-linux, journald binary files (we only read
 `journalctl` text export), `category: proxy` rules, Windows/macOS logs, DuckDB output, GeoIP.
@@ -50,7 +50,7 @@ Time format: `-U, --utc` (default: local time with offset, Hayabusa style `2026-
 
 Display: `-K, --no-color`, `-q, --quiet` (no banner).
 
-Startup banner (unless -q): `art/logo.txt` printed in bright green RGB(0,255,0) exactly like Suzaku's `display_logo`, then `Start time:` and `Version: 0.1.0 (Vulnpocalypse Release)`. Assets (`art/*`, `config/*`) are embedded with `include_str!` so the binary works from any cwd; if `./config/<file>` exists next to the executable or in the cwd it overrides the embedded copy.
+Startup banner (unless -q): `art/logo.txt` printed in bright green RGB(0,255,0) exactly like Suzaku's `display_logo`, then `Start time:` and `Version: 1.0.0 (CODE BLUE Release)`. Assets (`art/*`, `config/*`) are embedded with `include_str!` so the binary works from any cwd; if `./config/<file>` exists next to the executable or in the cwd it overrides the embedded copy.
 
 ## 2. Pipeline
 
@@ -441,7 +441,7 @@ ident/user; the rest are `field<N>`. The result is written as an nginx `log_form
 code, so the printed layout pastes into the configuration unchanged. Detected layouts and the number of files
 skipped as unrecognized are reported after the scan. Format names: `custom:<name>`, `access-auto`.
 
-A22. **Linux audit records and Sysmon for Linux (0.2.0).** Two built-in formats, `auditd` (`parsers/auditd.rs`)
+A22. **Linux audit records and Sysmon for Linux (1.0.0).** Two built-in formats, `auditd` (`parsers/auditd.rs`)
 and `sysmon-linux` (`parsers/sysmon_linux.rs`), both sniffed before the others; `audit.log*` (or `audit*` under an
 `audit/` directory) hints `auditd`, `sysmon*` hints `sysmon-linux`. *Audit*: one event per record (line), tag
 `linux/auditd`; header `[node=H] type=T msg=audit(TS:SERIAL):`, raw epoch → explicit UTC, `ausearch -i`'s

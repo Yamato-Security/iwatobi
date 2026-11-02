@@ -80,10 +80,10 @@ Iwatobiには、実行可能なSigmaHQのLinux（auditd、Sysmon for Linux、sys
 | `iwatobi-<version>-all-platforms.zip` | 上記すべてのバイナリと1組のルール |
 
 ```bash
-unzip iwatobi-0.1.0-lin-x64-musl.zip -d iwatobi
+unzip iwatobi-1.0.0-lin-x64-musl.zip -d iwatobi
 cd iwatobi
-chmod +x iwatobi-0.1.0-lin-x64-musl
-./iwatobi-0.1.0-lin-x64-musl help
+chmod +x iwatobi-1.0.0-lin-x64-musl
+./iwatobi-1.0.0-lin-x64-musl help
 ```
 
 `rules/`フォルダはバイナリと同じ場所に置いてください（または`-r`で指定します）。muslビルドは、古い
@@ -257,7 +257,7 @@ Git LFSは各ログのコピーを`.git`の下にも保持するため、約1.4G
 ./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
 ```
 
-（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-0.1.0-lin-x64-musl`）このリポジトリを
+（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-1.0.0-lin-x64-musl`）このリポジトリを
 クローンすると、`test_files/auditd/`と`test_files/sysmon-linux/`に、これらのファイルの一部と合成した
 ファイルも含まれています。各ファイルの出典と検知されるべき内容は
 [`test_files/README.md`](test_files/README.md)に記載しています。
@@ -494,7 +494,7 @@ EVIDENCE=honeypot-data/reports/php2shell/2026-10-24-rce-evidence
 ./iwatobi dfir-timeline -d "$EVIDENCE/episode-a/A01" -z UTC -U
 ```
 
-（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-0.1.0-lin-x64-musl`）パケット
+（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-1.0.0-lin-x64-musl`）パケット
 キャプチャ（`traffic.pcap.gz`）、Tetragonのプロセスイベント、事例のメタデータは、Iwatobiが解析する
 テキストログではないため、スキップされてエラーログに記録されます（`-v`で表示されます）。Iwatobi 0.1.0
 の検証で284個のファイルをスキャンした結果は次のとおりです。

@@ -10,7 +10,7 @@
    <a href="https://github.com/Yamato-Security/hayabusa">Hayabusa</a>, but for Linux text logs.
  </p>
  <p>
-    <a href="https://github.com/Yamato-Security/iwatobi/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg?style=flat"/></a>
+    <a href="https://github.com/Yamato-Security/iwatobi/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-RPL--1.5-blue.svg?style=flat"/></a>
     <a href="https://twitter.com/SecurityYamato"><img src="https://img.shields.io/twitter/follow/SecurityYamato?style=social"/></a>
  </p>
 </div>
@@ -520,5 +520,7 @@ counts that were derived by hand from the fixture lines.
 ## 🤝 Contributing & License
 
 Bug reports, log samples that do not parse and new rules are welcome as issues and pull requests.
-Iwatobi is released under the [AGPLv3](LICENSE) and
-copyright Yamato Security.
+Iwatobi is released under the [Reciprocal Public License 1.5](LICENSE) (RPL-1.5) and copyright Yamato
+Security. Versions up to 0.1.0 were released under the AGPLv3. The bundled SigmaHQ rules are under the
+[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md), and the test logs under the
+licenses listed in [`test_files/README.md`](test_files/README.md).

@@ -2,7 +2,7 @@
 
 Iwatobi (イワトビ, rockhopper penguin) is Yamato Security's native Sigma scanner for Linux text
 logs: the Hayabusa/Suzaku sibling for syslog-family logs, web server access/error logs and PHP
-logs. Rust binary, AGPL-3.0, repo https://github.com/Yamato-Security/iwatobi (private, currently
+logs. Rust binary, RPL-1.5 (AGPL-3.0 up to 0.1.0), repo https://github.com/Yamato-Security/iwatobi (private, currently
 only LICENSE + README). Version `1.0.0`, release name "CODE BLUE Release" (0.1.0: "Vulnpocalypse Release").
 
 Explicitly OUT of scope for 0.1.0: auditd, sysmon-for-linux, journald binary files (we only read

@@ -483,7 +483,11 @@ The loader converts numeric/boolean argument literals to strings in auditd selec
 guarded by `type: EXECVE`; syscall numeric fields and explicit numeric comparison modifiers retain
 their original semantics. A narrowly guarded compatibility adapter for upstream rule
 `4cb57c2f-1f29-41f8-893d-8bed8e1c1d2f` replaces its original fieldless command/runlevel keywords with
-executable-name checks and exact `a1` values `0`/`6`. It applies only to the known original selection
+executable-name checks and exact `a1` values `0`/`6`, and adds `systemctl` from the start of
+`CommandLine` with a shutdown or reboot argument (`reboot`, `poweroff`, `halt`, `kexec`, `soft-reboot`)
+or `isolate`/`start` of their `.target` (the fieldless keywords used to find these anywhere in the
+record; `echo systemctl reboot` and `sh -c "systemctl reboot"` do not match, the `systemctl` they run
+being a record of its own). It applies only to the known original selection
 shape; custom replacements remain untouched. Both normal and correlation-base rule loading use
 these adaptations through `normalize_detection`. Bundled SigmaHQ files remain verbatim.
 

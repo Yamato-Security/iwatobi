@@ -1336,3 +1336,72 @@ fn auditd_shutdown_rule_requires_the_executable_and_exact_runlevel() {
     assert_eq!(rows.len(), 5, "{rows:#?}");
     assert!(rows.iter().all(|r| r["LineNumber"].as_u64().unwrap() <= 5));
 }
+
+#[test]
+fn auditd_shutdown_rule_matches_systemctl_shutdown_commands() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let matching: &[&[&str]] = &[
+        &["systemctl", "reboot"],
+        &["/usr/bin/systemctl", "poweroff"],
+        &["systemctl", "--force", "halt"],
+        &["systemctl", "kexec", "--no-wall"],
+        &["systemctl", "soft-reboot"],
+        &["systemctl", "isolate", "reboot.target"],
+        &["systemctl", "--no-block", "start", "poweroff.target"],
+    ];
+    let other: &[&[&str]] = &[
+        &["systemctl", "daemon-reload"],
+        &["systemctl", "restart", "sshd"],
+        &["systemctl", "status", "reboot.target"],
+        &["systemctl", "start", "reboot-guard.service"],
+        &["mysystemctl", "reboot"],
+        &["echo", "systemctl", "reboot"],
+        &["sh", "-c", "systemctl reboot"],
+    ];
+    let lines: Vec<_> = matching
+        .iter()
+        .chain(other)
+        .enumerate()
+        .map(|(i, argv)| {
+            let args: Vec<_> = argv
+                .iter()
+                .enumerate()
+                .map(|(n, a)| {
+                    if a.contains(' ') {
+                        // auditd writes an argument with a space in hex
+                        let hex: String = a.bytes().map(|b| format!("{b:02X}")).collect();
+                        format!("a{n}={hex}")
+                    } else {
+                        format!("a{n}=\"{a}\"")
+                    }
+                })
+                .collect();
+            format!(
+                "type=EXECVE msg=audit(1723042099.699:{}): argc={} {}",
+                i + 1,
+                argv.len(),
+                args.join(" ")
+            )
+        })
+        .collect();
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_system_shutdown_reboot.yml",
+        ],
+    );
+    let mut matched: Vec<_> = rows
+        .iter()
+        .map(|r| r["LineNumber"].as_u64().unwrap())
+        .collect();
+    matched.sort_unstable();
+    assert_eq!(
+        matched,
+        (1..=matching.len() as u64).collect::<Vec<_>>(),
+        "{rows:#?}"
+    );
+}

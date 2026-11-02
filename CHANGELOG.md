@@ -4,7 +4,7 @@
 
 **Bug Fixes:**
 
-- Auditd: reconstruct complete EXECVE command lines for keyword matching, adapt numeric argument literals without changing numeric syscall fields, and prevent shutdown false positives with executable/runlevel-aware rule compatibility. Preserve incomplete argument fragments and keep the header record type authoritative. Bundled SigmaHQ rules stay unchanged. (@YamatoSecurity)
+- Auditd: reconstruct complete EXECVE command lines for keyword matching, adapt numeric argument literals without changing numeric syscall fields, and prevent shutdown false positives with executable/runlevel-aware rule compatibility that also covers `systemctl` shutdown and reboot commands. Preserve incomplete argument fragments and keep the header record type authoritative. Bundled SigmaHQ rules stay unchanged. (@YamatoSecurity)
 
 **New Features:**
 

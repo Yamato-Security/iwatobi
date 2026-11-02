@@ -207,8 +207,9 @@ Incomplete or inconsistent split arguments retain their fragments without synthe
 command. Argument literals in explicitly EXECVE-typed auditd selections are matched as strings;
 numeric SYSCALL fields keep their numeric types. The bundled shutdown rule has an in-memory
 compatibility adaptation that checks the executable and exact `a1` runlevel (`0` or `6`), avoiding
-matches on field names or command names inside unrelated arguments. The original log line and the
-upstream rule files remain unchanged.
+matches on field names or command names inside unrelated arguments. It also matches `systemctl` with
+a shutdown or reboot command (`reboot`, `poweroff`, `halt`, `kexec`, `soft-reboot`, or `isolate` /
+`start` of their `.target`). The original log line and the upstream rule files remain unchanged.
 
 Sysmon for Linux events are read from syslog lines (`... sysmon: <Event>...`), the journal, or files
 with one `<Event>` per line (an event whose command line contains a newline is joined back into one

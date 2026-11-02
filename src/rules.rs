@@ -231,12 +231,31 @@ fn normalize_auditd(doc: &mut Value) {
             Value::String("init".into()),
             selection("a0|re", Value::String(r"(^|/)(init|telinit)$".into())),
         );
+        // systemd shuts down through systemctl too: `systemctl reboot`, `systemctl --force
+        // poweroff`, `systemctl isolate reboot.target`. Its command line is checked from the
+        // start, so `echo systemctl reboot` or `sh -c "systemctl reboot"` do not match (the
+        // systemctl they run is a record of its own).
         detection.insert(
             Value::String("shutdowncmd".into()),
-            selection(
-                "a0|re",
-                Value::String(r"(^|/)(shutdown|reboot|halt|poweroff)$".into()),
-            ),
+            Value::Sequence(vec![
+                selection(
+                    "a0|re",
+                    Value::String(r"(^|/)(shutdown|reboot|halt|poweroff)$".into()),
+                ),
+                selection(
+                    "CommandLine|re",
+                    Value::Sequence(vec![
+                        Value::String(
+                            r"^(\S*/)?systemctl\s(.*\s)?(reboot|poweroff|halt|kexec|soft-reboot)(\s|$)"
+                                .into(),
+                        ),
+                        Value::String(
+                            r"^(\S*/)?systemctl\s(.*\s)?(isolate|start)\s(.*\s)?(reboot|poweroff|halt|kexec|soft-reboot)\.target(\s|$)"
+                                .into(),
+                        ),
+                    ]),
+                ),
+            ]),
         );
         detection.insert(
             Value::String("initselection".into()),

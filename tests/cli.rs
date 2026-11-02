@@ -415,6 +415,7 @@ fn auditd_fixtures() {
             r["LogFile"]
                 .as_str()
                 .unwrap()
+                .replace('\\', "/")
                 .ends_with("interpreted/split.log")
         })
         .unwrap();

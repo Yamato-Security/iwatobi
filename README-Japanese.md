@@ -21,12 +21,12 @@
 Iwatobiは、イワトビペンギンにちなんで名付けられた、メモリ安全なRustで書かれた**Linuxログ向けの脅威
 ハンティングおよびファストフォレンジックのタイムライン作成ツール**です。Linuxサーバーに実際に存在する
 テキストログ（syslog、`auth.log`、`cron`、Apacheとnginxのアクセスログとエラーログ、PHPとphp-fpmの
-ログ）を読み込み、[Suzaku](https://github.com/Yamato-Security/suzaku)と同じ
+ログ、Linuxの監査ログ、Sysmon for Linuxのイベント）を読み込み、[Suzaku](https://github.com/Yamato-Security/suzaku)と同じ
 [sigma-rust](https://github.com/Yamato-Security/sigma-rust)エンジンでネイティブな
 [Sigma](https://github.com/SigmaHQ/sigma)ルールを適用し、必要なイベントだけを含むDFIRタイムラインを
 作成します。
 
-Iwatobiには、実行可能なSigmaHQのLinuxおよびWebサーバー向けルールに加えて、PHP2Shellの脆弱性
+Iwatobiには、実行可能なSigmaHQのLinux（auditd、Sysmon for Linux、syslog）およびWebサーバー向けルールに加えて、PHP2Shellの脆弱性
 （CVE-2026-109618 / CVE-2026-109619）を検知する新しいルールセットが同梱されています。このルール
 セットは、公開されているリモートコード実行が確認されたハニーポットの証拠データで検証済みです。
 
@@ -45,6 +45,11 @@ Iwatobiには、実行可能なSigmaHQのLinuxおよびWebサーバー向けル�
   出力、vsftpdとClamAVのログ、Apache / nginxのアクセスログ（common、combined、vhost_combined、JSON
   Lines）、Apache 2.2/2.4とnginxのエラーログ、PHPのエラーログ、php-fpmのログ。PHPエンジンのメッセージは、
   どこに出力されていても認識します（Apacheのエラーログ、nginxのFastCGI stderr、php-fpm、syslog）。
+- **Linuxの監査ログとSysmon for Linux**: `audit.log`（rawとENRICHED）、`ausearch -i`の出力、
+  `audisp-syslog`が転送したレコードを読み込みます。16進数でエンコードされた引数はデコードし、
+  `SYSCALL`の名前を追加します。Sysmon for Linuxのイベントは、syslog、ジャーナル、または1行に1つの
+  XMLイベントを書いたファイルから読み込み、Sigmaの`process_creation`、`network_connection`、
+  `file_event`などのカテゴリに対応付けます（[Linuxの監査ログとSysmon for Linux](#linuxの監査ログとsysmon-for-linux)）。
 - **カスタムフォーマット**: nginxの`log_format`やApacheの`LogFormat`を変更したアクセスログを自動的に
   認識します。それ以外のレイアウトも、`config/custom_log_formats.yaml`にnginxのフォーマット、Apacheの
   フォーマット、または正規表現で定義できます（[カスタムログフォーマット](#カスタムログフォーマットcustom-log-formats)）。
@@ -165,8 +170,9 @@ Display Settings:
 ### ライブ解析
 
 `-l`は、読み込んだすべてのルールのログソースを集め、`config/log_locations.yaml`
-（`/var/log/syslog*`、`/var/log/auth.log*`、`/var/log/apache2/*`、`/var/log/nginx/*`、`/var/log/php*`
-など）で探します。ホスト上にファイルがないログソースについては、ディレクトリを入力するか、そのログ
+（`/var/log/syslog*`、`/var/log/auth.log*`、`/var/log/apache2/*`、`/var/log/nginx/*`、`/var/log/php*`、
+`/var/log/audit/audit.log*`など）で探します。Sysmon for Linuxのイベントはsyslog（またはジャーナル）から
+読み込みます。ホスト上にファイルがないログソースについては、ディレクトリを入力するか、そのログ
 ソースを必要とするルールをスキップするかを尋ねます。`-w, --no-wizard`を指定すると尋ねずにスキップ
 します。Iwatobiがターミナルに接続されていない場合も同じ動作になります。journaldしかないホストでは、
 `journalctl -o short-iso-precise`でジャーナルをエクスポートし、syslogとしてスキャンします。すべての
@@ -182,6 +188,30 @@ syslog（RFC 3164）、Apacheのエラーログ、nginxのエラーログ、php-
 とおりに使用します。タイムゾーントークンのないPHPの行も`-z`で読み込みます。出力はデフォルトでローカル
 時刻、`-U`でUTCです。RFC 3164の行には年もないため、ファイルの更新日時の年を使用し、それでは未来の
 日時になる行は1年前とみなします。
+
+
+### Linuxの監査ログとSysmon for Linux
+
+監査レコード（1行）は、SigmaHQの`service: auditd`ルールが想定しているとおり、それぞれ1つのイベントに
+なります。レコードのフィールドはそのままの名前（`type`、`a0`、`a1`、...、`exe`、`comm`、`key`、
+`name`、`nametype`など）で使えます。
+
+- rawの`audit.log`の行: auditdが16進数でエンコードする、引用符で囲まれていない値（`proctitle`、
+  `EXECVE`の引数、`name`、`cwd`、`comm`、`exe`など）は、`ausearch -i`と同じようにデコードします。
+  `a1[0]`、`a1[1]`...に分割された引数は`a1`に結合します。キーワードのルールもデコードした文字列に
+  一致します。ルールが使う`SYSCALL`の名前は、`arch`と`syscall`の番号から追加します（x86_64、aarch64）。
+- ENRICHEDの行（現在のauditdのデフォルトの`log_format`）では、`0x1D`の後ろにある解釈済みのフィールド
+  （`SYSCALL=execve UID="root"`など）も追加します。
+- `ausearch -i`の出力も読み込めます。時刻は`ausearch`を実行したマシンのローカルタイムで、タイム
+  ゾーンがないため、`-z`で指定してください。
+- 行頭の`node=`はホスト名として使います。
+
+Sysmon for Linuxのイベントは、syslogの行（`... sysmon: <Event>...`）、ジャーナル、または1行に1つの
+`<Event>`を書いたファイルから読み込みます（コマンドラインに改行を含むイベントは1つのイベントに結合
+します）。`EventData`のフィールドはそのままの名前（`Image`、`CommandLine`、`ParentImage`、
+`TargetFilename`、`DestinationPort`など）で使え、イベントIDからSigmaのカテゴリを決めます: 1
+`process_creation`、3 `network_connection`、5 `process_termination`、9 `raw_access_thread`、11
+`file_event`、23 `file_delete`。イベントの時刻は`SystemTime`（UTC）です。
 
 ### カスタムログフォーマット（Custom log formats）
 
@@ -308,9 +338,12 @@ CSVとターミナルでは`Key: value ¦ Key: value`の形式で表示し、JSO
 | `service: nginx`（または`product: nginx, service: error`） | nginxのエラーログ |
 | `product: php, service: error_log` | PHPのエラーログ、および他のログ内のPHPメッセージ |
 | `product: php, service: fpm` | php-fpmのログ |
+| `product: linux, service: auditd` | Linuxの監査レコード（`audit.log`、`ausearch -i`の出力、`audisp-syslog`の行） |
+| `product: linux` + `category: process_creation` / `network_connection` / `file_event` / `file_delete` / `process_termination` / `raw_access_thread`（または`service: sysmon`） | Sysmon for Linuxのイベント |
 
-auditd、Sysmon for Linux、Webプロキシ向けのルールにはまだ対応していないため、起動時にスキップされます
-（スキップした数が表示されます）。
+他の製品（Windows、クラウドサービス）やWebプロキシ向けのルールは、起動時にスキップされます（スキップ
+した数が表示されます）。SigmaHQのルールはリリース`r2026-07-01`のもので、
+[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md)でライセンスされています。
 
 ### PHP2Shell（CVE-2026-109618 / CVE-2026-109619）
 

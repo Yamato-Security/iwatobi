@@ -1,0 +1,1 @@
+type=SERVICE_STOP msg=audit(1722965483.442:15704): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=firewalld comm="systemd" exe="/usr/lib/systemd/systemd" hostname=? addr=? terminal=? res=success'UID="root" AUID="unset"

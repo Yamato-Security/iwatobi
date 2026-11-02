@@ -1,0 +1,2 @@
+type=EXECVE msg=audit(1723212899.390:131283): argc=2 a0="touch" a1="./.hide_this_data.txt"
+type=EXECVE msg=audit(1723212899.366:131264): argc=3 a0="sudo" a1="touch" a2="./.hide_this_data.txt"

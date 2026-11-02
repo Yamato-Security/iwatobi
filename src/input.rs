@@ -188,7 +188,11 @@ pub fn read_sample(path: &Path, max: usize) -> std::io::Result<(Vec<String>, boo
         let line = decode_line(&buf, first);
         first = false;
         if !line.trim().is_empty() {
-            if line.chars().any(|c| c.is_control() && c != '\t') {
+            // 0x1D separates the raw and the interpreted fields of ENRICHED audit records
+            if line
+                .chars()
+                .any(|c| c.is_control() && c != '\t' && c != '\u{1d}')
+            {
                 control_lines += 1;
             }
             sample.push(line);

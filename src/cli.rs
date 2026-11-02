@@ -149,7 +149,8 @@ pub struct InputOption {
     pub live_analysis: bool,
 
     /// Force the log format of every input file instead of detecting it: syslog, applog, access,
-    /// access-json, apache-error, nginx-error, php-error, php-fpm, or the name of a custom format
+    /// access-json, apache-error, nginx-error, php-error, php-fpm, auditd, sysmon-linux, or the
+    /// name of a custom format
     #[arg(help_heading = Some("Input"), long = "log-format", value_name = "FORMAT", display_order = 103)]
     pub log_format: Option<String>,
 

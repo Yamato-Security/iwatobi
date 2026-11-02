@@ -23,6 +23,24 @@
   paths: ["/var/log/clamav/*.log*", "/var/log/syslog*", "/var/log/messages*"]
 - logsource: {product: linux, service: guacamole}
   paths: ["/var/log/guacd*.log*", "/var/log/syslog*", "/var/log/messages*"]
+# Linux audit records (root only; `ausearch -i` output can be scanned with -f/-d instead).
+- logsource: {product: linux, service: auditd}
+  paths: ["/var/log/audit/audit.log*"]
+# Sysmon for Linux writes its events to syslog (and the systemd journal).
+- logsource: {product: linux, service: sysmon}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: process_creation}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: network_connection}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: process_termination}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: raw_access_thread}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: file_event}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
+- logsource: {product: linux, category: file_delete}
+  paths: ["/var/log/syslog*", "/var/log/messages*"]
 # Rules that only say `product: linux` apply to every syslog-family log.
 - logsource: {product: linux}
   paths: ["/var/log/syslog*", "/var/log/messages*", "/var/log/auth.log*", "/var/log/secure*", "/var/log/cron*", "/var/log/kern.log*", "/var/log/daemon.log*", "/var/log/user.log*"]

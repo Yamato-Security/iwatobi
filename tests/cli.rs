@@ -362,6 +362,120 @@ fn linux_syslog_family() {
     assert_eq!(j["Timestamp"], "2026-10-26 08:44:05.000 +00:00");
 }
 
+const CREDS: &str = "Credentials In Files - Linux";
+const ASLR: &str = "ASLR Disabled Via Sysctl or Direct Syscall - Linux";
+const NEW_CRON: &str = "New Cron File Created";
+const WEBSHELL: &str = "Linux Webshell Indicators";
+
+#[test]
+fn auditd_fixtures() {
+    let (_, rows) = scan_jsonl("-d", "test_files/auditd", &[]);
+    let c = count_by_title(&rows);
+    // raw/find_ssh_files.log 2 + the hex-encoded `grep -ri "my password"` of synthetic/audit.log
+    expect(&c, CREDS, 3);
+    expect(&c, "System Shutdown/Reboot - Linux", 13);
+    expect(&c, "Hidden Files and Directories", 1);
+    // ENRICHED records (0x1D separator)
+    expect(&c, "Modification of ld.so.preload", 4);
+    expect(&c, "Loading of Kernel Module via Insmod", 2);
+    expect(&c, "Disable System Firewall", 1);
+    expect(&c, "Creation Of An User Account", 1);
+    // ausearch -i output
+    expect(&c, "Service Reload or Start - Linux", 4);
+    expect(&c, "File or Folder Permissions Change", 1);
+    expect(&c, "Split A File Into Pieces - Linux", 2);
+    expect(&c, "Potential Abuse of Linux Magic System Request Key", 1);
+    expect(&c, "Use Of Hidden Paths Or Files", 3);
+    // synthetic: SYSCALL name from the x86_64 number, a split EXECVE argument, aarch64 memfd_create
+    expect(&c, ASLR, 2);
+    expect(&c, "Audio Capture", 1);
+    assert_eq!(rows.len(), 39);
+    assert!(rows.iter().all(|r| r["LogSource"] == "linux/auditd"));
+    let creds = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == CREDS && r["LogFile"].as_str().unwrap().contains("synthetic"))
+        .unwrap();
+    assert_eq!(creds["Details"]["a2"], "my password");
+    assert_eq!(creds["Timestamp"], "2026-11-02 00:00:00.200 +00:00");
+    assert_eq!(creds["LineNumber"], 2);
+    let split = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == ASLR && r["Details"]["type"] == "EXECVE")
+        .unwrap();
+    assert_eq!(split["Details"]["a2"], "kernel.randomize_va_space=0");
+    let syscall = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == ASLR && r["Details"]["type"] == "SYSCALL")
+        .unwrap();
+    assert_eq!(syscall["Details"]["SYSCALL"], "personality");
+    // ausearch -i times have no zone: -z UTC applies
+    let split_file = rows
+        .iter()
+        .find(|r| {
+            r["LogFile"]
+                .as_str()
+                .unwrap()
+                .ends_with("interpreted/split.log")
+        })
+        .unwrap();
+    assert_eq!(split_file["Timestamp"], "2025-04-16 09:14:42.784 +00:00");
+}
+
+#[test]
+fn sysmon_linux_fixtures() {
+    let (_, rows) = scan_jsonl("-d", "test_files/sysmon-linux", &[]);
+    let c = count_by_title(&rows);
+    expect(&c, "File and Directory Discovery - Linux", 3);
+    expect(&c, "Shell Execution via Find - Linux", 3);
+    expect(&c, "Suspicious Invocation of Shell via AWK - Linux", 2);
+    expect(&c, NEW_CRON, 8); // 7 in cron_append_excerpt.log + 1 in the journal export
+    // an 18-line event (a command line with newlines) joined back together
+    expect(
+        &c,
+        "Execution Of Script Located In Potentially Suspicious Directory",
+        1,
+    );
+    // Sysmon and audisp-syslog records inside syslog lines
+    expect(&c, WEBSHELL, 1);
+    expect(&c, "Linux Reverse Shell Indicator", 1);
+    expect(
+        &c,
+        "Potentially Suspicious Malware Callback Communication - Linux",
+        1,
+    );
+    expect(&c, CREDS, 1);
+    assert_eq!(rows.len(), 21);
+    let web = rows.iter().find(|r| r["RuleTitle"] == WEBSHELL).unwrap();
+    assert_eq!(web["LogSource"], "linux/process_creation");
+    assert_eq!(web["Timestamp"], "2026-11-02 00:00:01.123 +00:00");
+    assert_eq!(web["Details"]["Image"], "/usr/bin/whoami");
+    assert_eq!(web["Details"]["ParentImage"], "/usr/sbin/apache2");
+    let joined = rows
+        .iter()
+        .find(|r| {
+            r["RuleTitle"] == "Execution Of Script Located In Potentially Suspicious Directory"
+        })
+        .unwrap();
+    assert_eq!(joined["LineNumber"], 7, "the first line of the event");
+    let callback = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == "Potentially Suspicious Malware Callback Communication - Linux")
+        .unwrap();
+    assert_eq!(callback["LogSource"], "linux/network_connection");
+    assert_eq!(callback["Details"]["DestinationPort"], 4444);
+    let audisp = rows.iter().find(|r| r["RuleTitle"] == CREDS).unwrap();
+    assert_eq!(audisp["LogSource"], "linux/auditd");
+    let cron = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == NEW_CRON && r["LogFile"].as_str().unwrap().ends_with("journal"))
+        .unwrap();
+    assert_eq!(cron["LogSource"], "linux/file_event");
+    assert_eq!(
+        cron["Details"]["TargetFilename"],
+        "/etc/cron.d/apache-update"
+    );
+}
+
 #[test]
 fn web_fixtures() {
     let (_, rows) = scan_jsonl("-d", "test_files/web", &[]);
@@ -509,7 +623,7 @@ fn stdout_uses_the_standard_profile_and_colors_can_be_disabled() {
     assert!(!r.stdout.contains('\u{1b}'), "no ANSI escapes with -K");
     assert!(r.stdout.contains("Results Summary"), "{}", r.stdout);
     assert!(
-        r.stdout.contains("Total detection rules: 16"),
+        r.stdout.contains("Total detection rules: 204"),
         "{}",
         r.stdout
     );
@@ -762,6 +876,9 @@ fn fixture_tree_is_present() {
         "test_files/linux/syslog.2.gz",
         "rules/sigma/web/product/nginx/web_nginx_core_dump.yml",
         "rules/iwatobi/php/php2shell/php2shell_exploitation_chain.yml",
+        "test_files/auditd/raw/find_ssh_files.log",
+        "test_files/sysmon-linux/find.log",
+        "rules/sigma/linux/auditd/lnx_auditd_disable_aslr_protection.yml",
     ] {
         assert!(Path::new(&repo().join(f)).is_file(), "{f} missing");
     }
@@ -1107,7 +1224,7 @@ fn bad_custom_formats_and_unknown_format_names_are_errors() {
     let out = format!("{}{}", r.stdout, r.stderr);
     assert!(out.contains("'nosuch' is not a log format"), "{out}");
     assert!(
-        out.contains("php-fpm, shop-nginx, intranet-apache, vpnd"),
+        out.contains("php-fpm, auditd, sysmon-linux, shop-nginx, intranet-apache, vpnd"),
         "{out}"
     );
 }

@@ -33,6 +33,10 @@ impl LogSourceTag {
         Self::new(Some("linux"), None, Some(service))
     }
 
+    pub const fn linux_category(category: &'static str) -> Self {
+        Self::new(Some("linux"), Some(category), None)
+    }
+
     // syslog family
     pub const LINUX_SYSLOG: Self = Self::linux("syslog");
     pub const LINUX_AUTH: Self = Self::linux("auth");
@@ -42,6 +46,18 @@ impl LogSourceTag {
     pub const LINUX_VSFTPD: Self = Self::linux("vsftpd");
     pub const LINUX_CLAMAV: Self = Self::linux("clamav");
     pub const LINUX_GUACAMOLE: Self = Self::linux("guacamole");
+    // Linux audit daemon records (`/var/log/audit/audit.log`)
+    pub const LINUX_AUDITD: Self = Self::linux("auditd");
+    // Sysmon for Linux: the service, and the Sigma category of each event ID
+    pub const LINUX_SYSMON: Self = Self::linux("sysmon");
+    pub const LINUX_PROCESS_CREATION: Self = Self::linux_category("process_creation");
+    pub const LINUX_NETWORK_CONNECTION: Self = Self::linux_category("network_connection");
+    pub const LINUX_PROCESS_TERMINATION: Self = Self::linux_category("process_termination");
+    pub const LINUX_RAW_ACCESS_THREAD: Self = Self::linux_category("raw_access_thread");
+    pub const LINUX_FILE_EVENT: Self = Self::linux_category("file_event");
+    pub const LINUX_FILE_DELETE: Self = Self::linux_category("file_delete");
+    pub const LINUX_SYSMON_STATUS: Self = Self::linux_category("sysmon_status");
+    pub const LINUX_SYSMON_ERROR: Self = Self::linux_category("sysmon_error");
     // web server access logs (Sigma `category: webserver`)
     pub const WEBSERVER: Self = Self::new(None, Some("webserver"), None);
     pub const APACHE_WEBSERVER: Self = Self::new(Some("apache"), Some("webserver"), None);
@@ -82,6 +98,16 @@ pub const SUPPORTED_TAGS: &[LogSourceTag] = &[
     LogSourceTag::LINUX_VSFTPD,
     LogSourceTag::LINUX_CLAMAV,
     LogSourceTag::LINUX_GUACAMOLE,
+    LogSourceTag::LINUX_AUDITD,
+    LogSourceTag::LINUX_SYSMON,
+    LogSourceTag::LINUX_PROCESS_CREATION,
+    LogSourceTag::LINUX_NETWORK_CONNECTION,
+    LogSourceTag::LINUX_PROCESS_TERMINATION,
+    LogSourceTag::LINUX_RAW_ACCESS_THREAD,
+    LogSourceTag::LINUX_FILE_EVENT,
+    LogSourceTag::LINUX_FILE_DELETE,
+    LogSourceTag::LINUX_SYSMON_STATUS,
+    LogSourceTag::LINUX_SYSMON_ERROR,
     LogSourceTag::WEBSERVER,
     LogSourceTag::APACHE_WEBSERVER,
     LogSourceTag::NGINX_WEBSERVER,
@@ -220,8 +246,13 @@ mod tests {
 
     #[test]
     fn unsupported_logsources_are_detected() {
-        assert!(!LogSourceSpec::new(Some("linux"), Some("process_creation"), None).is_supported());
-        assert!(!LogSourceSpec::new(Some("linux"), None, Some("auditd")).is_supported());
+        assert!(LogSourceSpec::new(Some("linux"), Some("process_creation"), None).is_supported());
+        assert!(LogSourceSpec::new(Some("linux"), None, Some("auditd")).is_supported());
+        assert!(LogSourceSpec::new(Some("linux"), Some("network_connection"), None).is_supported());
+        assert!(
+            !LogSourceSpec::new(Some("windows"), Some("process_creation"), None).is_supported()
+        );
+        assert!(!LogSourceSpec::new(Some("linux"), Some("registry_set"), None).is_supported());
         assert!(!LogSourceSpec::new(None, Some("proxy"), None).is_supported());
         assert!(!LogSourceSpec::new(Some("windows"), None, Some("security")).is_supported());
         assert!(LogSourceSpec::new(Some("linux"), None, None).is_supported());
@@ -234,6 +265,11 @@ mod tests {
         assert_eq!(LogSourceTag::WEBSERVER.display(), "webserver");
         assert_eq!(LogSourceTag::APACHE_ERROR.display(), "apache");
         assert_eq!(LogSourceTag::PHP_ERROR_LOG.display(), "php/error_log");
+        assert_eq!(LogSourceTag::LINUX_AUDITD.display(), "linux/auditd");
+        assert_eq!(
+            LogSourceTag::LINUX_PROCESS_CREATION.display(),
+            "linux/process_creation"
+        );
         assert_eq!(
             LogSourceSpec::new(Some("linux"), None, Some("cron")).to_string(),
             "product: linux, service: cron"

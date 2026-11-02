@@ -1,0 +1,68 @@
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:38.950:6845) : op=set-pid auid=unset pid=61323 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:38.949:6844) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61323 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:38.701:6845) : op=set-pid auid=unset pid=61318 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:38.700:6844) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61318 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:38.453:6845) : op=set-pid auid=unset pid=61314 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:38.452:6844) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61314 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:38.202:6845) : op=set-pid auid=unset pid=61310 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:38.201:6844) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61310 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:37.933:3257) : op=set-pid auid=unset pid=61305 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:37.933:3256) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61305 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:26.201:2378) : op=set-pid auid=unset pid=61297 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:26.200:2377) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61297 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:25.949:8671) : op=set-pid auid=unset pid=61293 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:25.949:8670) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61293 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:25.699:8671) : op=set-pid auid=unset pid=61288 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:25.699:8670) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61288 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:25.453:8671) : op=set-pid auid=unset pid=61283 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:25.453:8670) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61283 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_ABORT msg=audit(06/05/2025 11:03:25.291:8671) : op=set-pid auid=unset pid=61277 uid=root ses=unset subj=unconfined  res=failed 
+type=DAEMON_START msg=audit(06/05/2025 11:03:25.291:8670) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=61277 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_END msg=audit(06/05/2025 11:01:46.838:9436) : op=terminate auid=root pid=1 subj=unconfined res=success 
+type=PATH msg=audit(06/05/2025 09:49:33.940:42937) : item=0 name=/usr/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:49:33.940:42936) : item=0 name=/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=DAEMON_START msg=audit(06/05/2025 09:49:33.869:9435) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=57986 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_END msg=audit(06/05/2025 09:49:33.798:5075) : op=terminate auid=root pid=1 subj=unconfined res=success 
+type=PATH msg=audit(06/05/2025 09:37:41.749:42104) : item=0 name=/usr/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:41.749:42103) : item=0 name=/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=DAEMON_START msg=audit(06/05/2025 09:37:41.664:5074) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=4756 uid=root ses=unset subj=unconfined  res=success 
+type=DAEMON_END msg=audit(06/05/2025 09:37:41.541:9052) : op=terminate auid=root pid=1 subj=unconfined res=success 
+type=PATH msg=audit(06/05/2025 09:37:22.391:36424) : item=2 name=/usr/share/man/man3/daemon.3.gz.dpkg-new inode=76483 dev=103:01 mode=file,644 ouid=root ogid=root rdev=00:00 nametype=DELETE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:22.391:36424) : item=3 name=/usr/share/man/man3/daemon.3.gz inode=76483 dev=103:01 mode=file,644 ouid=root ogid=root rdev=00:00 nametype=CREATE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=EXECVE msg=audit(06/05/2025 09:37:16.123:10098) : argc=2 a0=systemctl a1=daemon-reexec 
+type=PROCTITLE msg=audit(06/05/2025 09:37:16.123:10098) : proctitle=systemctl daemon-reexec 
+type=EXECVE msg=audit(06/05/2025 09:37:05.889:7489) : argc=2 a0=systemctl a1=daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 09:37:05.889:7489) : proctitle=systemctl daemon-reload 
+type=EXECVE msg=audit(06/05/2025 09:37:05.888:7488) : argc=3 a0=sh a1=-c a2=systemctl daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 09:37:05.888:7488) : proctitle=sh -c systemctl daemon-reload 
+type=EXECVE msg=audit(06/05/2025 09:37:00.921:7268) : argc=2 a0=systemctl a1=daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 09:37:00.509:7226) : proctitle=chown daemon:daemon /var/spool/cron/atjobs/.SEQ 
+type=EXECVE msg=audit(06/05/2025 09:37:00.508:7225) : argc=3 a0=chown a1=daemon:daemon a2=/var/spool/cron/atjobs/.SEQ 
+type=PROCTITLE msg=audit(06/05/2025 09:37:00.508:7225) : proctitle=chown daemon:daemon /var/spool/cron/atjobs/.SEQ 
+type=PATH msg=audit(06/05/2025 09:37:00.506:7222) : item=0 name=/var/spool/cron/atjobs/ inode=519215 dev=103:01 mode=dir,sticky,770 ouid=daemon ogid=daemon rdev=00:00 nametype=PARENT cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.480:7214) : item=2 name=/etc/at.deny.dpkg-new inode=72842 dev=103:01 mode=file,640 ouid=root ogid=daemon rdev=00:00 nametype=DELETE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.480:7214) : item=3 name=/etc/at.deny inode=72842 dev=103:01 mode=file,640 ouid=root ogid=daemon rdev=00:00 nametype=CREATE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.412:7112) : item=2 name=/usr/bin/at.dpkg-new inode=72863 dev=103:01 mode=file,suid,sgid,755 ouid=daemon ogid=daemon rdev=00:00 nametype=DELETE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.412:7112) : item=3 name=/usr/bin/at inode=72863 dev=103:01 mode=file,suid,sgid,755 ouid=daemon ogid=daemon rdev=00:00 nametype=CREATE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7082) : item=2 name=/var/spool/cron/atspool.dpkg-new inode=519216 dev=103:01 mode=dir,sticky,770 ouid=daemon ogid=daemon rdev=00:00 nametype=DELETE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7082) : item=3 name=/var/spool/cron/atspool inode=519216 dev=103:01 mode=dir,sticky,770 ouid=daemon ogid=daemon rdev=00:00 nametype=CREATE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7081) : item=0 name=/var/spool/cron/atspool.dpkg-new inode=519216 dev=103:01 mode=dir,000 ouid=daemon ogid=daemon rdev=00:00 nametype=NORMAL cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=SYSCALL msg=audit(06/05/2025 09:37:00.407:7080) : arch=x86_64 syscall=chown success=yes exit=0 a0=0x58deac8b0a80 a1=daemon a2=0x1 a3=0x58de6cd1b240 items=1 ppid=3698 pid=3756 auid=ubuntu uid=root gid=root euid=root suid=root fsuid=root egid=root sgid=root fsgid=root tty=pts2 ses=7 comm=dpkg exe=/usr/bin/dpkg subj=unconfined key=cron 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7075) : item=2 name=/var/spool/cron/atjobs.dpkg-new inode=519215 dev=103:01 mode=dir,sticky,770 ouid=daemon ogid=daemon rdev=00:00 nametype=DELETE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7075) : item=3 name=/var/spool/cron/atjobs inode=519215 dev=103:01 mode=dir,sticky,770 ouid=daemon ogid=daemon rdev=00:00 nametype=CREATE cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.407:7074) : item=0 name=/var/spool/cron/atjobs.dpkg-new inode=519215 dev=103:01 mode=dir,000 ouid=daemon ogid=daemon rdev=00:00 nametype=NORMAL cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=SYSCALL msg=audit(06/05/2025 09:37:00.407:7073) : arch=x86_64 syscall=chown success=yes exit=0 a0=0x58deac8b0a80 a1=daemon a2=0x1 a3=0x58de6cd1b240 items=1 ppid=3698 pid=3756 auid=ubuntu uid=root gid=root euid=root suid=root fsuid=root egid=root sgid=root fsgid=root tty=pts2 ses=7 comm=dpkg exe=/usr/bin/dpkg subj=unconfined key=cron 
+type=PATH msg=audit(06/05/2025 09:37:00.379:6990) : item=0 name=(null) inode=72863 dev=103:01 mode=file,000 ouid=daemon ogid=daemon rdev=00:00 nametype=NORMAL cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 09:37:00.377:6967) : item=0 name=(null) inode=72842 dev=103:01 mode=file,000 ouid=root ogid=daemon rdev=00:00 nametype=NORMAL cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=EXECVE msg=audit(06/05/2025 08:50:42.630:1771) : argc=2 a0=systemctl a1=daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 08:50:42.630:1771) : proctitle=systemctl daemon-reload 
+type=EXECVE msg=audit(06/05/2025 08:45:34.472:1034) : argc=4 a0=systemctl a1=is-active a2=-q a3=snap.lxd.daemon.unix.socket 
+type=PROCTITLE msg=audit(06/05/2025 08:45:34.472:1034) : proctitle=systemctl is-active -q snap.lxd.daemon.unix.socket 
+type=EXECVE msg=audit(06/05/2025 08:45:31.876:810) : argc=2 a0=systemctl a1=daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 08:45:31.876:810) : proctitle=systemctl daemon-reload 
+type=EXECVE msg=audit(06/05/2025 08:45:31.876:809) : argc=3 a0=sh a1=-c a2=systemctl daemon-reload 
+type=PROCTITLE msg=audit(06/05/2025 08:45:31.876:809) : proctitle=sh -c systemctl daemon-reload 
+type=EXECVE msg=audit(06/05/2025 08:45:31.851:793) : argc=5 a0=sh a1=-c a2=\012                /usr/lib/rsyslog/rsyslog-rotate\012 a3=logrotate_script a4=/var/log/syslog\012/var/log/mail.info\012/var/log/mail.warn\012/var/log/mail.err\012/var/log/mail.log\012/var/log/daemon.log\012/var/log/kern.log\012/var/log/auth.log\012/var/log/user.log\012/var/log/lpr.log\012/var/log/cron.log\012/var/log/debug\012/var/log/messages\012 
+type=PATH msg=audit(06/05/2025 08:45:27.663:284) : item=0 name=/usr/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(06/05/2025 08:45:27.663:283) : item=0 name=/lib64/dbus-1/dbus-daemon-launch-helper nametype=UNKNOWN cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=DAEMON_START msg=audit(06/05/2025 08:45:27.575:9051) : op=start ver=3.0.7 format=enriched kernel=6.8.0-1029-aws auid=unset pid=313 uid=root ses=unset subj=unconfined  res=success 

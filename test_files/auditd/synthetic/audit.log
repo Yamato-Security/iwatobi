@@ -1,0 +1,5 @@
+node=web01 type=SYSCALL msg=audit(1793577600.100:7001): arch=c000003e syscall=135 success=yes exit=0 a0=40000 a1=0 a2=0 a3=0 items=0 ppid=24400 pid=24401 auid=1000 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts0 ses=3 comm="setarch" exe="/usr/bin/setarch" subj=unconfined key=(null)
+node=web01 type=EXECVE msg=audit(1793577600.200:7002): argc=4 a0="grep" a1="-ri" a2=6D792070617373776F7264 a3="/etc"
+node=web01 type=PROCTITLE msg=audit(1793577600.200:7002): proctitle=67726570002D7269006D792070617373776F7264002F657463
+node=web01 type=EXECVE msg=audit(1793577600.300:7003): argc=3 a0="sysctl" a1="-w" a2_len=27 a2[0]="kernel.randomize" a2[1]="_va_space=0"
+node=arm01 type=SYSCALL msg=audit(1793577600.400:7004): arch=c00000b7 syscall=279 success=yes exit=3 a0=ffff8a2c1000 a1=1 a2=0 a3=0 items=0 ppid=24410 pid=24411 auid=1000 uid=1000 gid=1000 euid=1000 suid=1000 fsuid=1000 egid=1000 sgid=1000 fsgid=1000 tty=pts1 ses=4 comm="ecasound" exe="/usr/bin/ecasound" subj=unconfined key=(null)

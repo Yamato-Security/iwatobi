@@ -534,6 +534,9 @@ impl SyslogParser {
             }
         };
         ev.hostname = header.host.and_then(nil_to_none).map(str::to_string);
+        if let Some(embedded) = self.embedded_event(line, &header, &ev) {
+            return embedded;
+        }
         ev.push("process", header.process.clone());
         ev.push("pid", header.pid);
         ev.push("message", header.message.as_str());
@@ -556,6 +559,50 @@ impl SyslogParser {
         ev.set_primary(self.primary_for(&process_tags));
         self.ctx.finish(&mut ev);
         ev
+    }
+
+    /// A Sysmon for Linux event (`sysmon: <Event>...`) or an audit record that `audisp-syslog`
+    /// forwarded (`audisp-syslog: type=SYSCALL msg=audit(...): ...`) carried by a syslog line: the
+    /// event of that log source instead of a syslog event, with the syslog time and host as
+    /// fallbacks.
+    fn embedded_event(
+        &mut self,
+        line: &str,
+        header: &Header<'_>,
+        syslog: &ParsedEvent,
+    ) -> Option<ParsedEvent> {
+        let fallback_time = syslog.timestamp.map(|t| (t, syslog.tz_explicit));
+        let process = header.process.as_deref().unwrap_or("");
+        let message = header.message.as_str();
+        if let Some(xml) = super::sysmon_linux::extract(message)
+            && (process.eq_ignore_ascii_case("sysmon") || super::sysmon_linux::is_sysmon(xml))
+        {
+            return Some(super::sysmon_linux::sysmon_event(
+                line,
+                xml,
+                &self.ctx,
+                fallback_time,
+                syslog.hostname.clone(),
+            ));
+        }
+        if matches!(
+            process,
+            "audisp-syslog" | "audispd" | "audisp" | "auditd" | "audit"
+        ) && let Some(record) = super::auditd::parse_record(message)
+        {
+            let ctx = &self.ctx;
+            let warned = &mut self.warned_resolution;
+            let mut resolve = |naive| super::auditd::resolve_local(naive, ctx, warned);
+            return Some(super::auditd::record_event(
+                line,
+                record,
+                ctx,
+                fallback_time,
+                syslog.hostname.clone(),
+                &mut resolve,
+            ));
+        }
+        None
     }
 
     /// Tags of an AppLog event: the file-derived service tags, else `linux/syslog`.

@@ -1072,11 +1072,30 @@ mod tests {
         assert_eq!(set.stats.skipped_status, 0);
         assert_eq!(set.stats.skipped_level, 0);
         assert_eq!(set.stats.skipped_tag, 0);
-        assert_eq!(set.stats.files_seen, 18);
-        assert_eq!(set.rules.len(), 16);
+        assert_eq!(set.stats.files_seen, 206);
+        assert_eq!(set.rules.len(), 204);
         assert_eq!(set.correlations.len(), 2);
-        assert_eq!(set.stats.loaded, 16);
+        assert_eq!(set.stats.loaded, 204);
         assert_eq!(set.stats.correlations, 2);
+
+        // The SigmaHQ rules for audit records and Sysmon for Linux, by their file name prefixes
+        // (rules/sigma/linux/{auditd,process_creation,network_connection,file_event})
+        let sysmon_or_audit = [
+            "lnx_auditd_",
+            "proc_creation_lnx_",
+            "net_connection_lnx_",
+            "file_event_lnx_",
+        ];
+        let count = |prefix: &str| {
+            set.rules
+                .iter()
+                .filter(|r| r.meta.rule_file.starts_with(prefix))
+                .count()
+        };
+        assert_eq!(count("lnx_auditd_"), 53);
+        assert_eq!(count("proc_creation_lnx_"), 122);
+        assert_eq!(count("net_connection_lnx_"), 5);
+        assert_eq!(count("file_event_lnx_"), 8);
 
         let mut expected: Vec<String> = [
             // SigmaHQ rules under rules/sigma
@@ -1102,7 +1121,18 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         expected.sort();
-        assert_eq!(titles(&set), expected);
+        let mut others: Vec<String> = set
+            .rules
+            .iter()
+            .filter(|r| {
+                !sysmon_or_audit
+                    .iter()
+                    .any(|p| r.meta.rule_file.starts_with(p))
+            })
+            .map(|r| r.meta.title.clone())
+            .collect();
+        others.sort();
+        assert_eq!(others, expected);
 
         // Base rules of the correlation files must not be loaded as detection rules.
         assert!(!set.rules.iter().any(|r| {
@@ -1783,24 +1813,24 @@ mod tests {
         );
         write(
             dir.path(),
-            "proc.yml",
+            "registry.yml",
             &detection_yaml(
-                "Rule proc",
+                "Rule registry",
                 Some("high"),
                 None,
                 &[],
-                "    product: linux\n    category: process_creation",
+                "    product: windows\n    category: registry_set",
             ),
         );
         write(
             dir.path(),
-            "auditd.yml",
+            "macos.yml",
             &detection_yaml(
-                "Rule auditd",
+                "Rule macos",
                 Some("high"),
                 None,
                 &[],
-                "    product: linux\n    service: auditd",
+                "    product: macos\n    category: process_creation",
             ),
         );
         write(

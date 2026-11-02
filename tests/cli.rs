@@ -116,7 +116,7 @@ fn help_lists_the_commands() {
     assert_eq!(r.code, 0);
     assert!(r.stdout.contains("dfir-timeline"), "{}", r.stdout);
     assert!(r.stdout.contains("list-profiles"), "{}", r.stdout);
-    assert!(r.stdout.contains("Vulnpocalypse Release"), "{}", r.stdout);
+    assert!(r.stdout.contains("CODE BLUE Release"), "{}", r.stdout);
 }
 
 #[test]

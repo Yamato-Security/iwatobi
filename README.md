@@ -82,10 +82,10 @@ Download the package for your platform from the
 | `iwatobi-<version>-all-platforms.zip` | every binary above with one copy of the rules |
 
 ```bash
-unzip iwatobi-0.1.0-lin-x64-musl.zip -d iwatobi
+unzip iwatobi-1.0.0-lin-x64-musl.zip -d iwatobi
 cd iwatobi
-chmod +x iwatobi-0.1.0-lin-x64-musl
-./iwatobi-0.1.0-lin-x64-musl help
+chmod +x iwatobi-1.0.0-lin-x64-musl
+./iwatobi-1.0.0-lin-x64-musl help
 ```
 
 Keep the `rules/` folder next to the binary (or pass `-r`). The musl builds are the easiest choice
@@ -251,7 +251,7 @@ the `ausearch -i` files, whose times have no zone:
 ./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
 ```
 
-(`./iwatobi` is the binary from the package, e.g. `./iwatobi-0.1.0-lin-x64-musl`.) A clone of this
+(`./iwatobi` is the binary from the package, e.g. `./iwatobi-1.0.0-lin-x64-musl`.) A clone of this
 repository also has a small subset of these files, plus synthetic ones, in `test_files/auditd/` and
 `test_files/sysmon-linux/`. [`test_files/README.md`](test_files/README.md) lists where each comes from
 and what it should detect:
@@ -486,7 +486,7 @@ EVIDENCE=honeypot-data/reports/php2shell/2026-10-24-rce-evidence
 ./iwatobi dfir-timeline -d "$EVIDENCE/episode-a/A01" -z UTC -U
 ```
 
-(`./iwatobi` stands for the binary from the package, e.g. `./iwatobi-0.1.0-lin-x64-musl`.) The
+(`./iwatobi` stands for the binary from the package, e.g. `./iwatobi-1.0.0-lin-x64-musl`.) The
 packet captures (`traffic.pcap.gz`), Tetragon process events and case metadata are not text logs
 Iwatobi parses; they are skipped and listed in the error log (`-v` shows them). The 284 files scanned
 in Iwatobi 0.1.0's validation produced:

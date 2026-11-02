@@ -1,7 +1,7 @@
 name: Iwatobi Release Automation
 
 # Builds the release packages for every platform. Run it from the Actions tab (or
-# `gh workflow run release.yml -f release_ver=0.1.0 -f branch_or_tag=main`), then attach the
+# `gh workflow run release.yml -f release_ver=1.0.0 -f branch_or_tag=main`), then attach the
 # zips from the `all-packages` artifact to the GitHub release.
 #
 # Each package holds the iwatobi binary (renamed with the version and platform) plus the

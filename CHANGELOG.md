@@ -8,6 +8,10 @@
 - Sysmon for Linux: events in syslog, the systemd journal or one XML event per line (an event whose command line has a newline is joined back together), with every `EventData` field and the Sigma category of the event ID (`process_creation`, `network_connection`, `file_event`, `file_delete`, `process_termination`, `raw_access_thread`). (@YamatoSecurity)
 - Rules: the SigmaHQ `r2026-07-01` Linux `auditd` (53), `process_creation` (122), `network_connection` (5) and `file_event` (8) rules, with the Detection Rule License. Live analysis reads `/var/log/audit/audit.log*` for audit rules and syslog / the journal for Sysmon rules. `--log-format` accepts `auditd` and `sysmon-linux`. (@YamatoSecurity)
 
+**Other Changes:**
+
+- License: Iwatobi is now released under the Reciprocal Public License 1.5 (RPL-1.5) instead of the AGPLv3, and every source file carries the RPL License Notice. (@YamatoSecurity)
+
 ## 0.1.0 [2026/10/27] - Vulnpocalypse Release
 
 **New Features:**

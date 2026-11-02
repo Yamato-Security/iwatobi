@@ -9,7 +9,7 @@
    Linuxのテキストログ版の<a href="https://github.com/Yamato-Security/hayabusa">Hayabusa</a>だと考えてください。
  </p>
  <p>
-    <a href="https://github.com/Yamato-Security/iwatobi/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPLv3-blue.svg?style=flat"/></a>
+    <a href="https://github.com/Yamato-Security/iwatobi/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-RPL--1.5-blue.svg?style=flat"/></a>
     <a href="https://twitter.com/SecurityYamato"><img src="https://img.shields.io/twitter/follow/SecurityYamato?style=social"/></a>
  </p>
 </div>
@@ -528,4 +528,7 @@ cargo test
 ## 🤝 コントリビューションとライセンス
 
 バグ報告、解析できないログのサンプル、新しいルールは、IssueやPull Requestで歓迎しています。
-IwatobiはAGPLv3（[LICENSE](LICENSE)）のもとで公開されており、著作権はYamato Securityに帰属します。
+IwatobiはReciprocal Public License 1.5（RPL-1.5、[LICENSE](LICENSE)）のもとで公開されており、著作権は
+Yamato Securityに帰属します。0.1.0までのバージョンはAGPLv3で公開されていました。同梱のSigmaHQの
+ルールは[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md)、テスト用のログは
+[`test_files/README.md`](test_files/README.md)に記載したそれぞれのライセンスに従います。

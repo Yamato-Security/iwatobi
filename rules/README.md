@@ -5,7 +5,7 @@ Iwatobi loads every `*.yml` / `*.yaml` file under this directory (recursively) w
 
 | Directory | Content |
 | --- | --- |
-| `sigma/` | Rules taken verbatim from [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma), keeping the upstream directory layout (`linux/builtin/<service>/`, `web/product/<server>/`, ...). |
+| `sigma/` | Rules taken verbatim from [SigmaHQ/sigma](https://github.com/SigmaHQ/sigma) release `r2026-07-01`, keeping the upstream directory layout (`linux/auditd/`, `linux/process_creation/`, `linux/builtin/<service>/`, `web/product/<server>/`, ...). They are licensed under the [Detection Rule License 1.1](sigma/LICENSE.Detection.Rules.md). |
 | `iwatobi/` | Rules written for Iwatobi: `php/php2shell/` (PHP2Shell, CVE-2026-109618 / CVE-2026-109619), `php/fpm/` (php-fpm), `web/apache/` (Apache error log), `web/webserver/` (access logs). |
 
 ## Supported log sources
@@ -20,9 +20,11 @@ A rule is loaded when its `logsource` can be satisfied by one of the log formats
 | `service: nginx` | nginx error log |
 | `product: php`, `service: error_log` | PHP error log, and PHP messages inside the Apache error log |
 | `product: php`, `service: fpm` | php-fpm log |
+| `product: linux`, `service: auditd` | Linux audit records: `audit.log` (raw and ENRICHED), `ausearch -i` output, records forwarded by `audisp-syslog` |
+| `product: linux`, `category: process_creation`, `network_connection`, `file_event`, `file_delete`, `process_termination`, `raw_access_thread` (and `service: sysmon`) | Sysmon for Linux events (event IDs 1, 3, 11, 23, 5, 9) in syslog, the journal, or one XML event per line |
 
-Rules for other sources (auditd, Sysmon for Linux, `category: process_creation`, web proxies, ...)
-are skipped at load time and counted in the start-up summary.
+Rules for other sources (Windows, cloud services, web proxies, ...) are skipped at load time and
+counted in the start-up summary.
 
 ## Keywords match anywhere in the line
 
@@ -58,4 +60,18 @@ supported. Put the correlation and its base rules in one file separated by `---`
   `module`, `level`, `pid`, `client`, `error_code` and `message`; PHP error log events
   `php_type`, `message`, `file` and `line`; php-fpm events `level`, `pool`, `child_pid` and
   `message`. Every event also has `raw` (the whole line).
+- Audit record events have `type` and the record's fields under their own names (`a0`, `a1`, ...,
+  `exe`, `comm`, `key`, `name`, `nametype`, `proctitle`, ...), decoded when auditd hex-encoded them,
+  the interpreted upper-case fields of ENRICHED records, `SYSCALL` (the system call name) and
+  `serial`. Unquoted decimal values are numbers.
+- Sysmon for Linux events have `EventID`, every `EventData` field under its own name (`Image`,
+  `CommandLine`, `ParentImage`, `User`, `TargetFilename`, `DestinationIp`, `DestinationPort`,
+  `Initiated`, ...), `Channel`, `Computer`, `EventRecordID` and `Provider_Name`. Decimal values are
+  numbers (`DestinationPort: 4444`, `LogonId: 0`).
 - Test a rule with `iwatobi dfir-timeline -f <log> -r <rule.yml>`.
+
+The auditd loader adapts EXECVE argument literal types and the known original shutdown-rule
+selection shape in memory. The shutdown adapter checks the executable and exact `a1` runlevel,
+or `systemctl` with a shutdown or reboot command at the start of the reconstructed `CommandLine`;
+field names and unrelated argument text cannot supply its shutdown evidence. SigmaHQ files remain
+unchanged for synchronization. See DESIGN amendment A23 for the exact scope.

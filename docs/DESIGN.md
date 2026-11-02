@@ -440,3 +440,57 @@ path + protocol), status, client IP and user agent (all required), then referer,
 ident/user; the rest are `field<N>`. The result is written as an nginx `log_format` and compiled with the same
 code, so the printed layout pastes into the configuration unchanged. Detected layouts and the number of files
 skipped as unrecognized are reported after the scan. Format names: `custom:<name>`, `access-auto`.
+
+A22. **Linux audit records and Sysmon for Linux (0.2.0).** Two built-in formats, `auditd` (`parsers/auditd.rs`)
+and `sysmon-linux` (`parsers/sysmon_linux.rs`), both sniffed before the others; `audit.log*` (or `audit*` under an
+`audit/` directory) hints `auditd`, `sysmon*` hints `sysmon-linux`. *Audit*: one event per record (line), tag
+`linux/auditd`; header `[node=H] type=T msg=audit(TS:SERIAL):`, raw epoch → explicit UTC, `ausearch -i`'s
+`MM/DD/YYYY HH:MM:SS.mmm` (also `/YY`, `DD/MM` when the first number > 12) → naive, `-z`. Raw bodies are
+`key=value` tokens (`"…"`/`'…'` quoting); unquoted values of encodable fields (`proctitle`, `EXECVE` `aN`/`aN[i]`,
+`name`, `cwd`, `comm`, `exe`, `path`, `data`, `cmd`, `key`, `acct`) are hex-decoded (`proctitle` NULs → spaces,
+`key` 0x01 → `,`), `aN[i]` pieces are joined into `aN`, `msg='…'` payloads are flattened, and the ENRICHED part after
+`0x1D` adds its upper-case fields. `SYSCALL` (the name the SigmaHQ rules use) comes from ENRICHED, from an
+interpreted `syscall=name`, or from `arch` + number (`parsers/syscalls.rs`: kernel x86_64 `common`/`64` table and
+arm64 uapi numbers). Interpreted bodies are values already decoded: `EXECVE` args are split on the next `aN=` up to
+`argc`, `proctitle` is the rest of the line. Unquoted decimals that round-trip become `Int` (sigma-rust compares
+`Int` ≠ `String`; `a0: 40000`, `uid: 0`), everything else stays text. `ParsedEvent::match_text` (raw line + decoded
+`key="value"` pairs) replaces `raw` in the Sigma event so `'|all'` keyword lists see decoded text; the output still
+shows the line. `----`/`time->` separators are skipped. *Sysmon*: quick-xml; `EventID`, `EventData` fields in
+order (decimal → `Int`), `Channel`, `Computer`, `EventRecordID`, `Provider_Name`; time = `SystemTime`
+(explicit), else `UtcTime`; host = `Computer`. Tags `linux/sysmon` + category by event ID (1 process_creation,
+3 network_connection, 4/16 sysmon_status, 5 process_termination, 9 raw_access_thread, 11 file_event, 23
+file_delete, 255 sysmon_error), primary = the category. A document that fails to parse keeps the line with
+`parse_error`. *Multi-line*: `LineParser` gained `is_pending`/`finish`/`next_ready`; the Sysmon parser buffers
+lines from `<Event` to `</Event>` (1 MiB cap); `scan_lines` reports such an event at its first line and flushes at
+EOF. *Embedded*: a syslog line whose message holds a Sysmon document (`sysmon` process or `Linux-Sysmon`
+provider) or an audit record (`audisp-syslog`/`audispd`/`audit*` process) becomes that event (its own time and
+host first, the syslog ones as fallback), without the syslog tags. Files with `0x1D` are not binary. Live analysis:
+`config/log_locations.yaml` maps `service: auditd` to `/var/log/audit/audit.log*` and the Sysmon categories to
+syslog; the journal satisfies Sysmon needs but not auditd (`live::is_linux`). Rules: SigmaHQ `r2026-07-01`
+`rules/linux/{auditd,process_creation,network_connection,file_event}` verbatim + `LICENSE.Detection.Rules.md`.
+Validated against Zircolite 4.7.0 on 141 Splunk attack_data files (raw/ENRICHED auditd equal per rule, 66 each,
+except the shutdown rule: Zircolite's 13 matches are `grep` patterns that A23 no longer matches; Sysmon equal per
+rule after restricting Zircolite to each category's event ID, plus one 18-line event Zircolite cannot read).
+
+
+A23. **Auditd argument matching.** Complete EXECVE vectors are ordered by numeric argument index
+and appended to keyword matching as `CommandLine`, retaining the original record. Split arguments
+require contiguous fragment indexes and, when available, the declared byte length. Incomplete
+fragments are retained as fields without inventing an `aN` value or a complete command. Header record
+type takes precedence over any `type` in a user-space message payload.
+
+The loader converts numeric/boolean argument literals to strings in auditd selections explicitly
+guarded by `type: EXECVE`; syscall numeric fields and explicit numeric comparison modifiers retain
+their original semantics. A narrowly guarded compatibility adapter for upstream rule
+`4cb57c2f-1f29-41f8-893d-8bed8e1c1d2f` replaces its original fieldless command/runlevel keywords with
+executable-name checks and exact `a1` values `0`/`6`, and adds `systemctl` from the start of
+`CommandLine` with a shutdown or reboot argument (`reboot`, `poweroff`, `halt`, `kexec`, `soft-reboot`)
+or `isolate`/`start` of their `.target` (the fieldless keywords used to find these anywhere in the
+record; `echo systemctl reboot` and `sh -c "systemctl reboot"` do not match, the `systemctl` they run
+being a record of its own). It applies only to the known original selection
+shape; custom replacements remain untouched. Both normal and correlation-base rule loading use
+these adaptations through `normalize_detection`. Bundled SigmaHQ files remain verbatim.
+
+The shipped audit fixtures contain 13 earlier shutdown matches from grep arguments, all removed by
+the command-aware adaptation. Other fixture detections are retained. Earlier broad keyword-match
+comparison counts in A22 therefore include false positives addressed by A23.

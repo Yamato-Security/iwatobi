@@ -1,5 +1,17 @@
 # Changes
 
+## 0.2.0 [xxxx/xx/xx]
+
+**Bug Fixes:**
+
+- Auditd: reconstruct complete EXECVE command lines for keyword matching, adapt numeric argument literals without changing numeric syscall fields, and prevent shutdown false positives with executable/runlevel-aware rule compatibility that also covers `systemctl` shutdown and reboot commands. Preserve incomplete argument fragments and keep the header record type authoritative. Bundled SigmaHQ rules stay unchanged. (@YamatoSecurity)
+
+**New Features:**
+
+- Linux audit logs: `audit.log` in the raw and ENRICHED formats, `ausearch -i` output and records forwarded to syslog by `audisp-syslog`, one event per record for the Sigma `service: auditd` rules. Hex-encoded values (`proctitle`, `EXECVE` arguments, `name`, `cwd`, ...) are decoded and split arguments joined, so field and keyword rules see the text `ausearch -i` shows; raw records get the `SYSCALL` name from the x86_64 / aarch64 system call number. (@YamatoSecurity)
+- Sysmon for Linux: events in syslog, the systemd journal or one XML event per line (an event whose command line has a newline is joined back together), with every `EventData` field and the Sigma category of the event ID (`process_creation`, `network_connection`, `file_event`, `file_delete`, `process_termination`, `raw_access_thread`). (@YamatoSecurity)
+- Rules: the SigmaHQ `r2026-07-01` Linux `auditd` (53), `process_creation` (122), `network_connection` (5) and `file_event` (8) rules, with the Detection Rule License. Live analysis reads `/var/log/audit/audit.log*` for audit rules and syslog / the journal for Sysmon rules. `--log-format` accepts `auditd` and `sysmon-linux`. (@YamatoSecurity)
+
 ## 0.1.0 [2026/10/27] - Vulnpocalypse Release
 
 **New Features:**

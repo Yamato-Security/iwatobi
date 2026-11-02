@@ -360,8 +360,10 @@ impl Notes {
     }
 }
 
+/// A need the syslog files or the systemd journal can satisfy: `product: linux`, except the audit
+/// records, which are only in `/var/log/audit`.
 fn is_linux(need: &LogSourceSpec) -> bool {
-    need.product.as_deref() == Some("linux")
+    need.product.as_deref() == Some("linux") && need.service.as_deref() != Some("auditd")
 }
 
 /// True when the systemd journal should replace the syslog-family files: a rule needs
@@ -648,6 +650,30 @@ mod tests {
         assert!(!journal_wanted(&linux, [&auth]));
         assert!(!journal_wanted(&web, []));
         assert!(!journal_wanted(&[], []));
+    }
+
+    #[test]
+    fn the_journal_stands_in_for_syslog_and_sysmon_but_not_audit_logs() {
+        assert!(is_linux(&LogSourceSpec::new(
+            Some("linux"),
+            None,
+            Some("sshd")
+        )));
+        assert!(is_linux(&LogSourceSpec::new(
+            Some("linux"),
+            Some("process_creation"),
+            None
+        )));
+        assert!(!is_linux(&LogSourceSpec::new(
+            Some("linux"),
+            None,
+            Some("auditd")
+        )));
+        assert!(!is_linux(&LogSourceSpec::new(
+            None,
+            Some("webserver"),
+            None
+        )));
     }
 
     #[test]

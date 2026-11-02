@@ -22,12 +22,13 @@
 Iwatobi — named after the rockhopper penguin (イワトビペンギン) — is a **threat hunting and fast
 forensics timeline generator for Linux logs**, written in memory-safe Rust. It reads the text logs a
 Linux server actually has (syslog, `auth.log`, `cron`, Apache and nginx access and error logs, PHP
-and php-fpm logs), runs native [Sigma](https://github.com/SigmaHQ/sigma) rules over them with the
+and php-fpm logs, Linux audit logs and Sysmon for Linux events), runs native [Sigma](https://github.com/SigmaHQ/sigma) rules over them with the
 same [sigma-rust](https://github.com/Yamato-Security/sigma-rust) engine that powers
 [Suzaku](https://github.com/Yamato-Security/suzaku), and gives you a DFIR timeline with only the
 events you need.
 
-Iwatobi ships with the SigmaHQ Linux and web server rules it can run, plus a new rule set for the
+Iwatobi ships with the SigmaHQ Linux (auditd, Sysmon for Linux, syslog) and web server rules it can
+run, plus a new rule set for the
 PHP2Shell vulnerabilities (CVE-2026-109618 / CVE-2026-109619) that was validated against published
 honeypot evidence of confirmed remote code execution.
 
@@ -46,6 +47,11 @@ honeypot evidence of confirmed remote code execution.
   vsftpd and ClamAV logs, Apache / nginx access logs (common, combined, vhost_combined, JSON lines),
   Apache 2.2/2.4 and nginx error logs, PHP error logs and php-fpm logs. PHP engine messages are
   recognised wherever they appear (Apache error log, nginx FastCGI stderr, php-fpm, syslog).
+- **Linux audit and Sysmon for Linux**: `audit.log` (raw and ENRICHED), `ausearch -i` output and
+  records forwarded by `audisp-syslog`, with hex-encoded arguments decoded and `SYSCALL` names
+  added; Sysmon for Linux events in syslog, the journal or one XML event per line, mapped to the
+  Sigma `process_creation`, `network_connection`, `file_event`, ... categories
+  ([Linux audit logs and Sysmon for Linux](#linux-audit-logs-and-sysmon-for-linux)).
 - **Custom formats**: access logs written with a custom nginx `log_format` or Apache `LogFormat`
   are recognized automatically, and any other layout can be described in
   `config/custom_log_formats.yaml` as an nginx format, an Apache format or a regex
@@ -164,7 +170,8 @@ Display Settings:
 
 `-l` collects the log sources of every loaded rule and looks them up in
 `config/log_locations.yaml` (`/var/log/syslog*`, `/var/log/auth.log*`, `/var/log/apache2/*`,
-`/var/log/nginx/*`, `/var/log/php*`, ...). When a log source has no file on the host, Iwatobi asks
+`/var/log/nginx/*`, `/var/log/php*`, `/var/log/audit/audit.log*`, ...). Sysmon for Linux events are
+read from syslog (or the journal). When a log source has no file on the host, Iwatobi asks
 whether to enter a directory or skip the rules that need it; `-w, --no-wizard` skips without
 asking, which is also what happens when Iwatobi is not attached to a terminal. On a host with only
 journald, the journal is exported with `journalctl -o short-iso-precise` and scanned as syslog. Run
@@ -178,6 +185,112 @@ Access logs, ISO syslog lines and PHP error log lines with a zone token (`[24-Oc
 carry their own zone and are used as written; PHP lines without one are read with `-z` too.
 Output is local time by default, UTC with `-U`. RFC 3164 lines also lack a year: the year of the
 file's modification time is assumed, minus one for lines that would otherwise be in the future.
+
+### Linux audit logs and Sysmon for Linux
+
+Every audit record (line) is one event, the way the SigmaHQ `service: auditd` rules expect, with the
+record's fields under their own names (`type`, `a0`, `a1`, ..., `exe`, `comm`, `key`, `name`,
+`nametype`, ...):
+
+- Raw `audit.log` lines: unquoted values that auditd hex-encodes (`proctitle`, `EXECVE` arguments,
+  `name`, `cwd`, `comm`, `exe`, ...) are decoded the way `ausearch -i` shows them, and arguments
+  split into `a1[0]`, `a1[1]`, ... are joined back into `a1`. Keyword rules see the decoded text too.
+  The `SYSCALL` name the rules use is added from the `arch` and `syscall` number (x86_64, aarch64).
+- ENRICHED lines (the default `log_format` of current auditd) also get their interpreted fields
+  (`SYSCALL=execve UID="root" ...` after the `0x1D` byte).
+- `ausearch -i` output is read as well. Its times are the local time of the machine that ran
+  `ausearch` and carry no zone: set it with `-z`.
+- A `node=` prefix is used as the host name.
+
+Complete `EXECVE` argument vectors also provide a reconstructed `CommandLine` for keyword rules.
+Incomplete or inconsistent split arguments retain their fragments without synthesizing a complete
+command. Argument literals in explicitly EXECVE-typed auditd selections are matched as strings;
+numeric SYSCALL fields keep their numeric types. The bundled shutdown rule has an in-memory
+compatibility adaptation that checks the executable and exact `a1` runlevel (`0` or `6`), avoiding
+matches on field names or command names inside unrelated arguments. It also matches `systemctl` with
+a shutdown or reboot command (`reboot`, `poweroff`, `halt`, `kexec`, `soft-reboot`, or `isolate` /
+`start` of their `.target`). The original log line and the upstream rule files remain unchanged.
+
+Sysmon for Linux events are read from syslog lines (`... sysmon: <Event>...`), the journal, or files
+with one `<Event>` per line (an event whose command line contains a newline is joined back into one
+event). The `EventData` fields keep their names (`Image`, `CommandLine`, `ParentImage`,
+`TargetFilename`, `DestinationPort`, ...) and the event ID gives the Sigma category: 1
+`process_creation`, 3 `network_connection`, 5 `process_termination`, 9 `raw_access_thread`, 11
+`file_event`, 23 `file_delete`. The event time is `SystemTime` (UTC).
+
+#### Try it on public auditd and Sysmon for Linux logs
+
+[splunk/attack_data](https://github.com/splunk/attack_data) (Apache License 2.0) publishes logs
+recorded while attack techniques were run on test machines, in one folder per MITRE ATT&CK technique.
+Its Linux files are 162 logs (about 680 MB): Linux audit logs (raw, ENRICHED and `ausearch -i`
+output) and Sysmon for Linux events (one per line, or in syslog). The repository stores its logs with
+[Git LFS](https://git-lfs.com/), so clone it without them and download only the Linux ones. Install
+Git LFS and run `git lfs install` once first:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/splunk/attack_data.git
+git -C attack_data lfs pull --include='*auditd*,*sysmon_linux*,linux_sysmon.log'
+```
+
+This needs about 1.4 GB of disk, because Git LFS also keeps a copy of each log under `.git`. Scan
+`attack_data/datasets`. The other datasets remain small Git LFS pointer files: they and the YAML
+descriptions are skipped as unrecognized, and `-Q` keeps their list out of `logs/`. Use `-z UTC` for
+the `ausearch -i` files, whose times have no zone:
+
+```bash
+# timeline on the terminal (UTC)
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q
+
+# only high and critical alerts, without the summary
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -m high -N
+
+# save sorted CSV and JSONL with the verbose profile (rule, MITRE tags, log file and line)
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -s -o attack-data-timeline -t csv,jsonl
+
+# one technique only (T1574.006: hijacking the dynamic linker with ld.so.preload)
+./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
+```
+
+(`./iwatobi` is the binary from the package, e.g. `./iwatobi-0.1.0-lin-x64-musl`.) A clone of this
+repository also has a small subset of these files, plus synthetic ones, in `test_files/auditd/` and
+`test_files/sysmon-linux/`. [`test_files/README.md`](test_files/README.md) lists where each comes from
+and what it should detect:
+
+```bash
+./iwatobi dfir-timeline -d test_files/auditd -z UTC -U
+./iwatobi dfir-timeline -d test_files/sysmon-linux -z UTC -U
+```
+
+The 162 files hold 717,284 events. With the bundled SigmaHQ `r2026-07-01` rules, Iwatobi reports 771
+detections from 36 rules:
+
+| Rule category | Rules matched | Detections | high | medium | low | informational |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| auditd (`service: auditd`) | 12 | 197 | 175 | 8 | 14 | 0 |
+| Sysmon for Linux `process_creation` | 21 | 525 | 6 | 30 | 108 | 381 |
+| Sysmon for Linux `file_event` | 3 | 49 | 0 | 1 | 48 | 0 |
+| **Total** | **36** | **771** | **181** | **39** | **170** | **381** |
+
+No `network_connection` rule matched these datasets. The detections show the kinds of activity
+Iwatobi finds (detections in parentheses):
+
+- **Credential access:** searching files for passwords with `grep` (166).
+- **Persistence and privilege escalation:** new cron files (44) and `at` jobs (3), changes to
+  `/etc/ld.so.preload` (5), shell scripts written to `/etc/profile.d` (4), services reloaded or started
+  (4), kernel modules loaded with `insmod` (3), setuid capabilities set with `setcap` (2), `doas`
+  configured and used (2), a new user account (1).
+- **Defense evasion and impact:** file deletion (237), programs run from `/tmp` (5), hidden files and
+  paths (6), services stopped (4), `chmod` on sensitive directories (4), changes to sensitive files
+  (4), a disabled firewall (1), a permission change (1).
+- **Execution:** scripts run from suspicious directories (7), shells spawned through `find`, `awk` and
+  `apt` (8), the magic SysRq key (1).
+- **Discovery:** files and directories (91), accounts and groups (56), system information (46),
+  crontabs (32), network connections and configuration (20), sudoers files read (4), remote systems
+  (1).
+- **Command and control and exfiltration:** suspicious C2 activity (6), files split into pieces (3).
+
+These logs come from attack simulations. On a normal server, the discovery and file deletion rules
+also fire on routine administration: `-m medium` keeps only the 220 medium and high detections here.
 
 ### Custom log formats
 
@@ -303,9 +416,12 @@ when its `logsource` is one Iwatobi can produce:
 | `service: nginx` (or `product: nginx, service: error`) | nginx error log |
 | `product: php, service: error_log` | PHP error log and PHP messages in other logs |
 | `product: php, service: fpm` | php-fpm log |
+| `product: linux, service: auditd` | Linux audit records (`audit.log`, `ausearch -i` output, `audisp-syslog` lines) |
+| `product: linux` + `category: process_creation` / `network_connection` / `file_event` / `file_delete` / `process_termination` / `raw_access_thread` (or `service: sysmon`) | Sysmon for Linux events |
 
-Rules for auditd, Sysmon for Linux and web proxies are not supported yet and are skipped at start-up
-(the count is shown).
+Rules for other products (Windows, cloud services) and for web proxies are skipped at start-up (the
+count is shown). The SigmaHQ rules come from release `r2026-07-01` and are licensed under the
+[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md).
 
 ### PHP2Shell (CVE-2026-109618 / CVE-2026-109619)
 

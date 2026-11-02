@@ -21,12 +21,12 @@
 Iwatobiは、イワトビペンギンにちなんで名付けられた、メモリ安全なRustで書かれた**Linuxログ向けの脅威
 ハンティングおよびファストフォレンジックのタイムライン作成ツール**です。Linuxサーバーに実際に存在する
 テキストログ（syslog、`auth.log`、`cron`、Apacheとnginxのアクセスログとエラーログ、PHPとphp-fpmの
-ログ）を読み込み、[Suzaku](https://github.com/Yamato-Security/suzaku)と同じ
+ログ、Linuxの監査ログ、Sysmon for Linuxのイベント）を読み込み、[Suzaku](https://github.com/Yamato-Security/suzaku)と同じ
 [sigma-rust](https://github.com/Yamato-Security/sigma-rust)エンジンでネイティブな
 [Sigma](https://github.com/SigmaHQ/sigma)ルールを適用し、必要なイベントだけを含むDFIRタイムラインを
 作成します。
 
-Iwatobiには、実行可能なSigmaHQのLinuxおよびWebサーバー向けルールに加えて、PHP2Shellの脆弱性
+Iwatobiには、実行可能なSigmaHQのLinux（auditd、Sysmon for Linux、syslog）およびWebサーバー向けルールに加えて、PHP2Shellの脆弱性
 （CVE-2026-109618 / CVE-2026-109619）を検知する新しいルールセットが同梱されています。このルール
 セットは、公開されているリモートコード実行が確認されたハニーポットの証拠データで検証済みです。
 
@@ -45,6 +45,11 @@ Iwatobiには、実行可能なSigmaHQのLinuxおよびWebサーバー向けル�
   出力、vsftpdとClamAVのログ、Apache / nginxのアクセスログ（common、combined、vhost_combined、JSON
   Lines）、Apache 2.2/2.4とnginxのエラーログ、PHPのエラーログ、php-fpmのログ。PHPエンジンのメッセージは、
   どこに出力されていても認識します（Apacheのエラーログ、nginxのFastCGI stderr、php-fpm、syslog）。
+- **Linuxの監査ログとSysmon for Linux**: `audit.log`（rawとENRICHED）、`ausearch -i`の出力、
+  `audisp-syslog`が転送したレコードを読み込みます。16進数でエンコードされた引数はデコードし、
+  `SYSCALL`の名前を追加します。Sysmon for Linuxのイベントは、syslog、ジャーナル、または1行に1つの
+  XMLイベントを書いたファイルから読み込み、Sigmaの`process_creation`、`network_connection`、
+  `file_event`などのカテゴリに対応付けます（[Linuxの監査ログとSysmon for Linux](#linuxの監査ログとsysmon-for-linux)）。
 - **カスタムフォーマット**: nginxの`log_format`やApacheの`LogFormat`を変更したアクセスログを自動的に
   認識します。それ以外のレイアウトも、`config/custom_log_formats.yaml`にnginxのフォーマット、Apacheの
   フォーマット、または正規表現で定義できます（[カスタムログフォーマット](#カスタムログフォーマットcustom-log-formats)）。
@@ -165,8 +170,9 @@ Display Settings:
 ### ライブ解析
 
 `-l`は、読み込んだすべてのルールのログソースを集め、`config/log_locations.yaml`
-（`/var/log/syslog*`、`/var/log/auth.log*`、`/var/log/apache2/*`、`/var/log/nginx/*`、`/var/log/php*`
-など）で探します。ホスト上にファイルがないログソースについては、ディレクトリを入力するか、そのログ
+（`/var/log/syslog*`、`/var/log/auth.log*`、`/var/log/apache2/*`、`/var/log/nginx/*`、`/var/log/php*`、
+`/var/log/audit/audit.log*`など）で探します。Sysmon for Linuxのイベントはsyslog（またはジャーナル）から
+読み込みます。ホスト上にファイルがないログソースについては、ディレクトリを入力するか、そのログ
 ソースを必要とするルールをスキップするかを尋ねます。`-w, --no-wizard`を指定すると尋ねずにスキップ
 します。Iwatobiがターミナルに接続されていない場合も同じ動作になります。journaldしかないホストでは、
 `journalctl -o short-iso-precise`でジャーナルをエクスポートし、syslogとしてスキャンします。すべての
@@ -182,6 +188,115 @@ syslog（RFC 3164）、Apacheのエラーログ、nginxのエラーログ、php-
 とおりに使用します。タイムゾーントークンのないPHPの行も`-z`で読み込みます。出力はデフォルトでローカル
 時刻、`-U`でUTCです。RFC 3164の行には年もないため、ファイルの更新日時の年を使用し、それでは未来の
 日時になる行は1年前とみなします。
+
+
+### Linuxの監査ログとSysmon for Linux
+
+監査レコード（1行）は、SigmaHQの`service: auditd`ルールが想定しているとおり、それぞれ1つのイベントに
+なります。レコードのフィールドはそのままの名前（`type`、`a0`、`a1`、...、`exe`、`comm`、`key`、
+`name`、`nametype`など）で使えます。
+
+- rawの`audit.log`の行: auditdが16進数でエンコードする、引用符で囲まれていない値（`proctitle`、
+  `EXECVE`の引数、`name`、`cwd`、`comm`、`exe`など）は、`ausearch -i`と同じようにデコードします。
+  `a1[0]`、`a1[1]`...に分割された引数は`a1`に結合します。キーワードのルールもデコードした文字列に
+  一致します。ルールが使う`SYSCALL`の名前は、`arch`と`syscall`の番号から追加します（x86_64、aarch64）。
+- ENRICHEDの行（現在のauditdのデフォルトの`log_format`）では、`0x1D`の後ろにある解釈済みのフィールド
+  （`SYSCALL=execve UID="root"`など）も追加します。
+- `ausearch -i`の出力も読み込めます。時刻は`ausearch`を実行したマシンのローカルタイムで、タイム
+  ゾーンがないため、`-z`で指定してください。
+- 行頭の`node=`はホスト名として使います。
+
+完全な`EXECVE`引数列からは、キーワード検索用の`CommandLine`も再構成します。
+分割された引数に欠落や不整合がある場合は、断片を保持し、完全なコマンドを推測しません。
+`EXECVE`型が明示されたauditd選択条件では引数のリテラルを文字列として扱い、
+`SYSCALL`の数値フィールドは数値のまま保持します。同梱のシャットダウンルールには、
+実行ファイル名と`a1`のランレベル（`0`または`6`）を確認するメモリ上の互換処理を適用します。
+これにより、フィールド名や別のコマンドの引数に含まれる文字列による誤検知を防ぎます。
+シャットダウンや再起動のコマンドを指定した`systemctl`（`reboot`、`poweroff`、`halt`、`kexec`、
+`soft-reboot`、またはそれらの`.target`に対する`isolate`や`start`）も検知します。
+元のログ行と上流のルールファイルは変更しません。
+
+Sysmon for Linuxのイベントは、syslogの行（`... sysmon: <Event>...`）、ジャーナル、または1行に1つの
+`<Event>`を書いたファイルから読み込みます（コマンドラインに改行を含むイベントは1つのイベントに結合
+します）。`EventData`のフィールドはそのままの名前（`Image`、`CommandLine`、`ParentImage`、
+`TargetFilename`、`DestinationPort`など）で使え、イベントIDからSigmaのカテゴリを決めます: 1
+`process_creation`、3 `network_connection`、5 `process_termination`、9 `raw_access_thread`、11
+`file_event`、23 `file_delete`。イベントの時刻は`SystemTime`（UTC）です。
+
+#### 公開されているauditdとSysmon for Linuxのログで試す
+
+[splunk/attack_data](https://github.com/splunk/attack_data)（Apache License 2.0）では、テスト用の
+マシンで攻撃手法を実行したときに記録したログが、MITRE ATT&CKのテクニックごとのフォルダで公開されて
+います。Linuxのファイルは162個（約680MB）で、Linuxの監査ログ（raw、ENRICHED、`ausearch -i`の出力）と
+Sysmon for Linuxのイベント（1行に1つ、またはsyslog）です。ログは[Git LFS](https://git-lfs.com/)で
+保存されているため、ログを含めずにクローンしてから、Linuxのログだけをダウンロードしてください。
+事前にGit LFSをインストールし、一度だけ`git lfs install`を実行してください。
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/splunk/attack_data.git
+git -C attack_data lfs pull --include='*auditd*,*sysmon_linux*,linux_sysmon.log'
+```
+
+Git LFSは各ログのコピーを`.git`の下にも保持するため、約1.4GBのディスク容量が必要です。
+`attack_data/datasets`をスキャンしてください。ほかのデータセットは小さなGit LFSのポインタファイルの
+ままです。それらとYAMLの説明ファイルは、フォーマットを認識できないファイルとしてスキップされます。
+`-Q`を付けると、その一覧を`logs/`に保存しません。`ausearch -i`のファイルの時刻にはタイムゾーンが
+ないため、`-z UTC`を指定してください。
+
+```bash
+# ターミナルにタイムラインを表示（UTC）
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q
+
+# highとcriticalのアラートのみ、サマリーなし
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -m high -N
+
+# verboseプロファイル（ルール、MITREタグ、ログファイルと行番号）で、ソートしたCSVとJSONLを保存
+./iwatobi dfir-timeline -d attack_data/datasets -z UTC -U -Q -s -o attack-data-timeline -t csv,jsonl
+
+# 1つのテクニックのみ（T1574.006: ld.so.preloadによるダイナミックリンカの乗っ取り）
+./iwatobi dfir-timeline -d attack_data/datasets/attack_techniques/T1574.006 -z UTC -U -Q
+```
+
+（`./iwatobi`はパッケージ内のバイナリを指します。例: `./iwatobi-0.1.0-lin-x64-musl`）このリポジトリを
+クローンすると、`test_files/auditd/`と`test_files/sysmon-linux/`に、これらのファイルの一部と合成した
+ファイルも含まれています。各ファイルの出典と検知されるべき内容は
+[`test_files/README.md`](test_files/README.md)に記載しています。
+
+```bash
+./iwatobi dfir-timeline -d test_files/auditd -z UTC -U
+./iwatobi dfir-timeline -d test_files/sysmon-linux -z UTC -U
+```
+
+162個のファイルには717,284件のイベントがあります。同梱のSigmaHQ `r2026-07-01`のルールでは、36個の
+ルールで771件を検知します。
+
+| ルールのカテゴリ | 一致したルール | 検知数 | high | medium | low | informational |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| auditd（`service: auditd`） | 12 | 197 | 175 | 8 | 14 | 0 |
+| Sysmon for Linux `process_creation` | 21 | 525 | 6 | 30 | 108 | 381 |
+| Sysmon for Linux `file_event` | 3 | 49 | 0 | 1 | 48 | 0 |
+| **合計** | **36** | **771** | **181** | **39** | **170** | **381** |
+
+これらのデータセットに一致した`network_connection`のルールはありません。検知結果から、Iwatobiで
+見つけられる活動の種類がわかります（括弧内は検知数）。
+
+- **認証情報へのアクセス:** `grep`によるファイル内のパスワード検索（166）。
+- **永続化と権限昇格:** 新しいcronファイル（44）と`at`ジョブ（3）、`/etc/ld.so.preload`の変更（5）、
+  `/etc/profile.d`へのシェルスクリプトの書き込み（4）、サービスのリロードと起動（4）、`insmod`による
+  カーネルモジュールの読み込み（3）、`setcap`によるsetuidケーパビリティの設定（2）、`doas`の設定と
+  使用（2）、新しいユーザーアカウント（1）。
+- **防御回避と影響:** ファイルの削除（237）、`/tmp`からのプログラムの実行（5）、隠しファイルと
+  隠しパス（6）、サービスの停止（4）、重要なディレクトリに対する`chmod`（4）、重要なファイルの変更（4）、
+  ファイアウォールの無効化（1）、パーミッションの変更（1）。
+- **実行:** 不審なディレクトリにあるスクリプトの実行（7）、`find`、`awk`、`apt`を経由したシェルの起動
+  （8）、Magic SysRqキー（1）。
+- **探索:** ファイルとディレクトリ（91）、アカウントとグループ（56）、システム情報（46）、crontab（32）、
+  ネットワーク接続と設定（20）、sudoersファイルの読み取り（4）、リモートシステム（1）。
+- **C2と持ち出し:** 不審なC2活動（6）、ファイルの分割（3）。
+
+これらのログは攻撃のシミュレーションで記録されたものです。通常のサーバーでは、探索とファイル削除の
+ルールは日常的な管理作業でも検知されます。`-m medium`を指定すると、ここではmediumとhighの220件だけが
+残ります。
 
 ### カスタムログフォーマット（Custom log formats）
 
@@ -308,9 +423,12 @@ CSVとターミナルでは`Key: value ¦ Key: value`の形式で表示し、JSO
 | `service: nginx`（または`product: nginx, service: error`） | nginxのエラーログ |
 | `product: php, service: error_log` | PHPのエラーログ、および他のログ内のPHPメッセージ |
 | `product: php, service: fpm` | php-fpmのログ |
+| `product: linux, service: auditd` | Linuxの監査レコード（`audit.log`、`ausearch -i`の出力、`audisp-syslog`の行） |
+| `product: linux` + `category: process_creation` / `network_connection` / `file_event` / `file_delete` / `process_termination` / `raw_access_thread`（または`service: sysmon`） | Sysmon for Linuxのイベント |
 
-auditd、Sysmon for Linux、Webプロキシ向けのルールにはまだ対応していないため、起動時にスキップされます
-（スキップした数が表示されます）。
+他の製品（Windows、クラウドサービス）やWebプロキシ向けのルールは、起動時にスキップされます（スキップ
+した数が表示されます）。SigmaHQのルールはリリース`r2026-07-01`のもので、
+[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md)でライセンスされています。
 
 ### PHP2Shell（CVE-2026-109618 / CVE-2026-109619）
 

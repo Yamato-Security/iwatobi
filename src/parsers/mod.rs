@@ -7,10 +7,13 @@
 
 pub mod access;
 pub mod apache_error;
+pub mod auditd;
 pub mod layout;
 pub mod nginx_error;
 pub mod php;
+pub mod syscalls;
 pub mod syslog;
+pub mod sysmon_linux;
 pub mod timestamp;
 
 use crate::event::ParsedEvent;
@@ -40,6 +43,10 @@ pub enum LogFormat {
     PhpError,
     /// php-fpm master process log.
     PhpFpm,
+    /// Linux audit records (`audit.log`, `ausearch -i` output).
+    Auditd,
+    /// Sysmon for Linux events, one XML document per line without a syslog header.
+    SysmonLinux,
 }
 
 impl LogFormat {
@@ -52,6 +59,8 @@ impl LogFormat {
         LogFormat::NginxError,
         LogFormat::PhpError,
         LogFormat::PhpFpm,
+        LogFormat::Auditd,
+        LogFormat::SysmonLinux,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -64,6 +73,8 @@ impl LogFormat {
             LogFormat::NginxError => "nginx-error",
             LogFormat::PhpError => "php-error",
             LogFormat::PhpFpm => "php-fpm",
+            LogFormat::Auditd => "auditd",
+            LogFormat::SysmonLinux => "sysmon-linux",
         }
     }
 
@@ -83,6 +94,8 @@ impl LogFormat {
             LogFormat::NginxError => nginx_error::matches_entry(line),
             LogFormat::PhpError => php::matches_error_entry(line),
             LogFormat::PhpFpm => php::matches_fpm_entry(line),
+            LogFormat::Auditd => auditd::matches_entry(line),
+            LogFormat::SysmonLinux => sysmon_linux::matches_entry(line),
         }
     }
 }
@@ -217,6 +230,12 @@ pub fn path_hints(path: &Path) -> PathHints {
         hints.format = Some(LogFormat::AppLog);
     }
 
+    if base == "audit" || (parents.first() == Some(&"audit") && base.starts_with("audit")) {
+        hints.format = Some(LogFormat::Auditd);
+    } else if base.starts_with("sysmon") {
+        hints.format = Some(LogFormat::SysmonLinux);
+    }
+
     if hints.format.is_none() {
         hints.format = if base.contains("access") {
             Some(if has_json_extension(&file) {
@@ -336,8 +355,25 @@ impl ParseContext {
 
 /// A stateful line parser for one file.
 pub trait LineParser {
-    /// Parse one line (without its newline). `None` only for blank lines.
+    /// Parse one line (without its newline). `None` for blank lines, and for the lines of a record
+    /// that spans several lines until its last one (see [`LineParser::is_pending`]).
     fn parse_line(&mut self, line: &str) -> Option<ParsedEvent>;
+
+    /// True while the parser holds the first lines of a multi-line record.
+    fn is_pending(&self) -> bool {
+        false
+    }
+
+    /// The record still held at the end of the input, if any.
+    fn finish(&mut self) -> Option<ParsedEvent> {
+        None
+    }
+
+    /// A second record the last line produced (a multi-line record cut off by the start of the
+    /// next one returns the broken record first, then this one).
+    fn next_ready(&mut self) -> Option<ParsedEvent> {
+        None
+    }
 }
 
 /// Build the parser for a file format.
@@ -358,6 +394,8 @@ fn builtin_parser(format: LogFormat, ctx: ParseContext) -> Box<dyn LineParser> {
         LogFormat::NginxError => Box::new(nginx_error::NginxErrorParser::new(ctx)),
         LogFormat::PhpError => Box::new(php::PhpErrorParser::new(ctx)),
         LogFormat::PhpFpm => Box::new(php::PhpFpmParser::new(ctx)),
+        LogFormat::Auditd => Box::new(auditd::AuditdParser::new(ctx)),
+        LogFormat::SysmonLinux => Box::new(sysmon_linux::SysmonLinuxParser::new(ctx)),
     }
 }
 
@@ -402,6 +440,8 @@ pub fn sniff_format(sample: &[String], hints: &PathHints) -> Option<LogFormat> {
     // Specific formats first so that a PHP-FPM log (which also looks like a PHP error log) and a
     // JSON access log win over the generic shapes.
     let order = [
+        LogFormat::Auditd,
+        LogFormat::SysmonLinux,
         LogFormat::PhpFpm,
         LogFormat::PhpError,
         LogFormat::AccessJson,
@@ -513,6 +553,10 @@ mod tests {
         let h = path_hints(Path::new("apache-stderr-segment.log"));
         assert_eq!(h.format, Some(LogFormat::ApacheError));
         assert_eq!(h.product, Some("apache"));
+        let h = path_hints(Path::new("/var/log/audit/audit.log.3"));
+        assert_eq!(h.format, Some(LogFormat::Auditd));
+        let h = path_hints(Path::new("/cases/host1/sysmon_linux.log"));
+        assert_eq!(h.format, Some(LogFormat::SysmonLinux));
         let h = path_hints(Path::new("/srv/app/worker-stderr.log"));
         assert_eq!(
             h.format, None,

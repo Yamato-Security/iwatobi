@@ -362,6 +362,122 @@ fn linux_syslog_family() {
     assert_eq!(j["Timestamp"], "2026-10-26 08:44:05.000 +00:00");
 }
 
+const CREDS: &str = "Credentials In Files - Linux";
+const ASLR: &str = "ASLR Disabled Via Sysctl or Direct Syscall - Linux";
+const NEW_CRON: &str = "New Cron File Created";
+const WEBSHELL: &str = "Linux Webshell Indicators";
+
+#[test]
+fn auditd_fixtures() {
+    let (_, rows) = scan_jsonl("-d", "test_files/auditd", &[]);
+    let c = count_by_title(&rows);
+    // raw/find_ssh_files.log 2 + the hex-encoded `grep -ri "my password"` of synthetic/audit.log
+    expect(&c, CREDS, 3);
+    // These fixtures contain grep patterns naming shutdown tools, not their execution.
+    expect(&c, "System Shutdown/Reboot - Linux", 0);
+    expect(&c, "Hidden Files and Directories", 1);
+    // ENRICHED records (0x1D separator)
+    expect(&c, "Modification of ld.so.preload", 4);
+    expect(&c, "Loading of Kernel Module via Insmod", 2);
+    expect(&c, "Disable System Firewall", 1);
+    expect(&c, "Creation Of An User Account", 1);
+    // ausearch -i output
+    expect(&c, "Service Reload or Start - Linux", 4);
+    expect(&c, "File or Folder Permissions Change", 1);
+    expect(&c, "Split A File Into Pieces - Linux", 2);
+    expect(&c, "Potential Abuse of Linux Magic System Request Key", 1);
+    expect(&c, "Use Of Hidden Paths Or Files", 3);
+    // synthetic: SYSCALL name from the x86_64 number, a split EXECVE argument, aarch64 memfd_create
+    expect(&c, ASLR, 2);
+    expect(&c, "Audio Capture", 1);
+    assert_eq!(rows.len(), 26);
+    assert!(rows.iter().all(|r| r["LogSource"] == "linux/auditd"));
+    let creds = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == CREDS && r["LogFile"].as_str().unwrap().contains("synthetic"))
+        .unwrap();
+    assert_eq!(creds["Details"]["a2"], "my password");
+    assert_eq!(creds["Timestamp"], "2026-11-02 00:00:00.200 +00:00");
+    assert_eq!(creds["LineNumber"], 2);
+    let split = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == ASLR && r["Details"]["type"] == "EXECVE")
+        .unwrap();
+    assert_eq!(split["Details"]["a2"], "kernel.randomize_va_space=0");
+    let syscall = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == ASLR && r["Details"]["type"] == "SYSCALL")
+        .unwrap();
+    assert_eq!(syscall["Details"]["SYSCALL"], "personality");
+    // ausearch -i times have no zone: -z UTC applies
+    let split_file = rows
+        .iter()
+        .find(|r| {
+            r["LogFile"]
+                .as_str()
+                .unwrap()
+                .replace('\\', "/")
+                .ends_with("interpreted/split.log")
+        })
+        .unwrap();
+    assert_eq!(split_file["Timestamp"], "2025-04-16 09:14:42.784 +00:00");
+}
+
+#[test]
+fn sysmon_linux_fixtures() {
+    let (_, rows) = scan_jsonl("-d", "test_files/sysmon-linux", &[]);
+    let c = count_by_title(&rows);
+    expect(&c, "File and Directory Discovery - Linux", 3);
+    expect(&c, "Shell Execution via Find - Linux", 3);
+    expect(&c, "Suspicious Invocation of Shell via AWK - Linux", 2);
+    expect(&c, NEW_CRON, 8); // 7 in cron_append_excerpt.log + 1 in the journal export
+    // an 18-line event (a command line with newlines) joined back together
+    expect(
+        &c,
+        "Execution Of Script Located In Potentially Suspicious Directory",
+        1,
+    );
+    // Sysmon and audisp-syslog records inside syslog lines
+    expect(&c, WEBSHELL, 1);
+    expect(&c, "Linux Reverse Shell Indicator", 1);
+    expect(
+        &c,
+        "Potentially Suspicious Malware Callback Communication - Linux",
+        1,
+    );
+    expect(&c, CREDS, 1);
+    assert_eq!(rows.len(), 21);
+    let web = rows.iter().find(|r| r["RuleTitle"] == WEBSHELL).unwrap();
+    assert_eq!(web["LogSource"], "linux/process_creation");
+    assert_eq!(web["Timestamp"], "2026-11-02 00:00:01.123 +00:00");
+    assert_eq!(web["Details"]["Image"], "/usr/bin/whoami");
+    assert_eq!(web["Details"]["ParentImage"], "/usr/sbin/apache2");
+    let joined = rows
+        .iter()
+        .find(|r| {
+            r["RuleTitle"] == "Execution Of Script Located In Potentially Suspicious Directory"
+        })
+        .unwrap();
+    assert_eq!(joined["LineNumber"], 7, "the first line of the event");
+    let callback = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == "Potentially Suspicious Malware Callback Communication - Linux")
+        .unwrap();
+    assert_eq!(callback["LogSource"], "linux/network_connection");
+    assert_eq!(callback["Details"]["DestinationPort"], 4444);
+    let audisp = rows.iter().find(|r| r["RuleTitle"] == CREDS).unwrap();
+    assert_eq!(audisp["LogSource"], "linux/auditd");
+    let cron = rows
+        .iter()
+        .find(|r| r["RuleTitle"] == NEW_CRON && r["LogFile"].as_str().unwrap().ends_with("journal"))
+        .unwrap();
+    assert_eq!(cron["LogSource"], "linux/file_event");
+    assert_eq!(
+        cron["Details"]["TargetFilename"],
+        "/etc/cron.d/apache-update"
+    );
+}
+
 #[test]
 fn web_fixtures() {
     let (_, rows) = scan_jsonl("-d", "test_files/web", &[]);
@@ -509,7 +625,7 @@ fn stdout_uses_the_standard_profile_and_colors_can_be_disabled() {
     assert!(!r.stdout.contains('\u{1b}'), "no ANSI escapes with -K");
     assert!(r.stdout.contains("Results Summary"), "{}", r.stdout);
     assert!(
-        r.stdout.contains("Total detection rules: 16"),
+        r.stdout.contains("Total detection rules: 204"),
         "{}",
         r.stdout
     );
@@ -762,6 +878,9 @@ fn fixture_tree_is_present() {
         "test_files/linux/syslog.2.gz",
         "rules/sigma/web/product/nginx/web_nginx_core_dump.yml",
         "rules/iwatobi/php/php2shell/php2shell_exploitation_chain.yml",
+        "test_files/auditd/raw/find_ssh_files.log",
+        "test_files/sysmon-linux/find.log",
+        "rules/sigma/linux/auditd/lnx_auditd_disable_aslr_protection.yml",
     ] {
         assert!(Path::new(&repo().join(f)).is_file(), "{f} missing");
     }
@@ -1107,7 +1226,182 @@ fn bad_custom_formats_and_unknown_format_names_are_errors() {
     let out = format!("{}{}", r.stdout, r.stderr);
     assert!(out.contains("'nosuch' is not a log format"), "{out}");
     assert!(
-        out.contains("php-fpm, shop-nginx, intranet-apache, vpnd"),
+        out.contains("php-fpm, auditd, sysmon-linux, shop-nginx, intranet-apache, vpnd"),
         "{out}"
+    );
+}
+
+#[test]
+fn auditd_bpfdoor_keywords_match_reconstructed_adjacent_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let lines = [
+        r#"type=EXECVE msg=audit(1723042099.699:1): argc=5 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="42392""#,
+        "type=EXECVE msg=audit(04/16/2025 08:20:23.552:2) : argc=5 a0=iptables a1=-t a2=nat a3=--to-ports a4=43123",
+        r#"type=EXECVE msg=audit(1723042099.699:3): argc=5 a0=69707461626C6573 a1="-t" a2="nat" a3=2D2D746F2D706F727473 a4="42392""#,
+        r#"type=EXECVE msg=audit(1723042099.699:4): argc=6 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="unrelated" a5="42392""#,
+        r#"type=EXECVE msg=audit(1723042099.699:5): argc=5 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="99999""#,
+        r#"type=EXECVE msg=audit(1723042099.699:6): argc=6 a0="iptables" a1="-t" a2="nat" a4="--to-ports" a5="42392""#,
+    ];
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_bpfdoor_port_redirect.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 3, "{rows:#?}");
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["LineNumber"].as_u64().unwrap())
+            .collect::<std::collections::BTreeSet<_>>(),
+        [1, 2, 3].into_iter().collect()
+    );
+    assert!(rows.iter().all(|r| {
+        r["Details"]["CommandLine"]
+            .as_str()
+            .unwrap()
+            .contains("--to-ports 4")
+    }));
+}
+
+#[test]
+fn auditd_numeric_execve_argument_rule_keeps_string_semantics() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    std::fs::write(
+        &input,
+        [
+            r#"type=EXECVE msg=audit(1723042099.699:1): argc=3 a0="chmod" a1="777" a2="file""#,
+            "type=EXECVE msg=audit(04/16/2025 08:20:23.552:2) : argc=3 a0=chmod a1=777 a2=file",
+            r#"type=EXECVE msg=audit(1723042099.699:3): argc=3 a0="chmod" a1="755" a2="file""#,
+            r#"type=EXECVE msg=audit(1723042099.699:4): argc=3 a0="chmod" a1="7770" a2="file""#,
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_susp_cmds.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 2, "{rows:#?}");
+    assert!(rows.iter().all(|r| r["Details"]["a1"] == "777"));
+}
+
+#[test]
+fn auditd_shutdown_rule_requires_the_executable_and_exact_runlevel() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let commands = [
+        ("init", "0"),
+        ("telinit", "6"),
+        ("/sbin/init", "6"),
+        ("shutdown", "-h"),
+        ("reboot", ""),
+        ("telinit", "3"),
+        ("init", "--help"),
+        ("init", "60"),
+        ("telinit", "16"),
+        ("echo", "reboot"),
+        ("echo", "init 0"),
+    ];
+    let mut lines: Vec<_> = commands
+        .iter()
+        .enumerate()
+        .map(|(i, (a, b))| {
+            format!(
+                "type=EXECVE msg=audit(1723042099.699:{}): argc=2 a0=\"{a}\" a1=\"{b}\"",
+                i + 1
+            )
+        })
+        .collect();
+    lines.push(
+        "type=USER msg=audit(1723042099.699:20): msg='type=EXECVE argc=2 a0=init a1=0'".into(),
+    );
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_system_shutdown_reboot.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 5, "{rows:#?}");
+    assert!(rows.iter().all(|r| r["LineNumber"].as_u64().unwrap() <= 5));
+}
+
+#[test]
+fn auditd_shutdown_rule_matches_systemctl_shutdown_commands() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let matching: &[&[&str]] = &[
+        &["systemctl", "reboot"],
+        &["/usr/bin/systemctl", "poweroff"],
+        &["systemctl", "--force", "halt"],
+        &["systemctl", "kexec", "--no-wall"],
+        &["systemctl", "soft-reboot"],
+        &["systemctl", "isolate", "reboot.target"],
+        &["systemctl", "--no-block", "start", "poweroff.target"],
+    ];
+    let other: &[&[&str]] = &[
+        &["systemctl", "daemon-reload"],
+        &["systemctl", "restart", "sshd"],
+        &["systemctl", "status", "reboot.target"],
+        &["systemctl", "start", "reboot-guard.service"],
+        &["mysystemctl", "reboot"],
+        &["echo", "systemctl", "reboot"],
+        &["sh", "-c", "systemctl reboot"],
+    ];
+    let lines: Vec<_> = matching
+        .iter()
+        .chain(other)
+        .enumerate()
+        .map(|(i, argv)| {
+            let args: Vec<_> = argv
+                .iter()
+                .enumerate()
+                .map(|(n, a)| {
+                    if a.contains(' ') {
+                        // auditd writes an argument with a space in hex
+                        let hex: String = a.bytes().map(|b| format!("{b:02X}")).collect();
+                        format!("a{n}={hex}")
+                    } else {
+                        format!("a{n}=\"{a}\"")
+                    }
+                })
+                .collect();
+            format!(
+                "type=EXECVE msg=audit(1723042099.699:{}): argc={} {}",
+                i + 1,
+                argv.len(),
+                args.join(" ")
+            )
+        })
+        .collect();
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_system_shutdown_reboot.yml",
+        ],
+    );
+    let mut matched: Vec<_> = rows
+        .iter()
+        .map(|r| r["LineNumber"].as_u64().unwrap())
+        .collect();
+    matched.sort_unstable();
+    assert_eq!(
+        matched,
+        (1..=matching.len() as u64).collect::<Vec<_>>(),
+        "{rows:#?}"
     );
 }

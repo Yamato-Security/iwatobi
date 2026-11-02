@@ -1,0 +1,3 @@
+type=CWD msg=audit(11/24/2025 14:44:08.586:329275) : cwd=/home/ubuntu 
+type=PATH msg=audit(11/24/2025 14:44:08.586:329275) : item=0 name=/proc/sys/kernel/ inode=454 dev=00:17 mode=dir,555 ouid=root ogid=root rdev=00:00 nametype=PARENT cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 
+type=PATH msg=audit(11/24/2025 14:44:08.586:329275) : item=1 name=/proc/sys/kernel/sysrq inode=612 dev=00:17 mode=file,644 ouid=root ogid=root rdev=00:00 nametype=NORMAL cap_fp=none cap_fi=none cap_fe=0 cap_fver=0 cap_frootid=0 

@@ -139,13 +139,10 @@ pub fn scan_lines<I: Iterator<Item = String>>(
     *result.summary.formats.entry(format.name()).or_default() += 1;
     let mut saw_zoned = false;
     let mut saw_naive = false;
-    for (idx, line) in lines.enumerate() {
-        let Some(event) = parser.parse_line(&line) else {
-            continue;
-        };
+    let mut handle = |event: ParsedEvent, line: usize| {
         let ts_utc = event.timestamp.map(|t| t.with_timezone(&Utc));
         if !opts.time_filter.accepts(ts_utc) {
-            continue;
+            return;
         }
         result.events += 1;
         result.summary.total_events += 1;
@@ -168,7 +165,7 @@ pub fn scan_lines<I: Iterator<Item = String>>(
                     event: event.clone(),
                     rule_index: i,
                     file: file.clone(),
-                    line: idx + 1,
+                    line,
                 });
             }
         }
@@ -181,16 +178,39 @@ pub fn scan_lines<I: Iterator<Item = String>>(
                 hit = true;
                 // Only an event with a time can take part in a time window.
                 let Some(ts) = ts_utc else { continue };
-                let summary = format!("{} ({}:{})", base.meta.title, file, idx + 1);
+                let summary = format!("{} ({}:{})", base.meta.title, file, line);
                 let mut base_hit = make_base_hit(corr, ci, bi, &sigma_event, &event, ts, summary);
                 base_hit.file = file.clone();
-                base_hit.line = idx + 1;
+                base_hit.line = line;
                 result.base_hits.push(base_hit);
             }
         }
         if hit {
             result.summary.events_with_hits += 1;
         }
+    };
+    // the first line of a record that spans several lines
+    let mut pending_start: Option<usize> = None;
+    for (idx, line) in lines.enumerate() {
+        let Some(event) = parser.parse_line(&line) else {
+            if parser.is_pending() && pending_start.is_none() {
+                pending_start = Some(idx + 1);
+            }
+            continue;
+        };
+        let line_no = pending_start.take().unwrap_or(idx + 1);
+        handle(event, line_no);
+        while let Some(event) = parser.next_ready() {
+            handle(event, idx + 1);
+        }
+        if parser.is_pending() {
+            // the line that ended one record started the next one
+            pending_start = Some(idx + 1);
+        }
     }
+    if let Some(event) = parser.finish() {
+        handle(event, pending_start.unwrap_or(1));
+    }
+    drop(handle);
     result.mixed_zone_sources = saw_zoned && saw_naive;
 }

@@ -138,6 +138,10 @@ pub struct ParsedEvent {
     pub fields: Vec<(String, FieldValue)>,
     /// The original line, without the trailing newline.
     pub raw: String,
+    /// The text keyword lists are matched against when it differs from `raw`: an audit record
+    /// whose hex-encoded values were decoded matches `grep` / `password` keywords the way
+    /// `ausearch -i` shows it. Never shown in the output.
+    pub match_text: Option<String>,
 }
 
 impl ParsedEvent {
@@ -151,6 +155,7 @@ impl ParsedEvent {
             tags: vec![*primary],
             fields: Vec::new(),
             raw: raw.to_string(),
+            match_text: None,
         }
     }
 
@@ -193,7 +198,8 @@ impl ParsedEvent {
     }
 
     /// The sigma-rust event: every field, plus `hostname` and `raw` (the whole line, so that
-    /// keywords match "the full log message" as the Sigma specification requires).
+    /// keywords match "the full log message" as the Sigma specification requires; for an audit
+    /// record with decoded values, the line followed by the decoded values).
     pub fn to_sigma_event(&self) -> Event {
         let mut event = Event::new();
         for (k, v) in &self.fields {
@@ -202,7 +208,7 @@ impl ParsedEvent {
         if let Some(h) = &self.hostname {
             event.insert("hostname", h.as_str());
         }
-        event.insert("raw", self.raw.as_str());
+        event.insert("raw", self.match_text.as_deref().unwrap_or(&self.raw));
         event
     }
 }

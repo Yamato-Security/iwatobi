@@ -10,7 +10,7 @@
 
 **Other Changes:**
 
-- License: Iwatobi is now released under the Reciprocal Public License 1.5 (RPL-1.5) instead of the AGPLv3, and every source file carries the RPL License Notice. (@YamatoSecurity)
+- License: Iwatobi is now copyright Shirofune Security Co., Ltd. and released under the Reciprocal Public License 1.5 (RPL-1.5) instead of the AGPLv3; every source file carries the copyright and the RPL License Notice. (@YamatoSecurity)
 
 ## 0.1.0 [2026/10/27] - Vulnpocalypse Release
 

@@ -529,6 +529,6 @@ cargo test
 
 バグ報告、解析できないログのサンプル、新しいルールは、IssueやPull Requestで歓迎しています。
 IwatobiはReciprocal Public License 1.5（RPL-1.5、[LICENSE](LICENSE)）のもとで公開されており、著作権は
-Yamato Securityに帰属します。0.1.0までのバージョンはAGPLv3で公開されていました。同梱のSigmaHQの
+Shirofune Security Co., Ltd.に帰属します。0.1.0までのバージョンはAGPLv3で公開されていました。同梱のSigmaHQの
 ルールは[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md)、テスト用のログは
 [`test_files/README.md`](test_files/README.md)に記載したそれぞれのライセンスに従います。

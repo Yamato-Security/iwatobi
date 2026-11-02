@@ -1,4 +1,4 @@
-// Copyright (C) 2026 Yamato Security
+// Copyright (C) 2026 Shirofune Security Co., Ltd.
 //
 // Unless explicitly acquired and licensed from Licensor under another license, the contents of this
 // file are subject to the Reciprocal Public License ("RPL") Version 1.5, or subsequent versions as

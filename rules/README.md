@@ -69,3 +69,8 @@ supported. Put the correlation and its base rules in one file separated by `---`
   `Initiated`, ...), `Channel`, `Computer`, `EventRecordID` and `Provider_Name`. Decimal values are
   numbers (`DestinationPort: 4444`, `LogonId: 0`).
 - Test a rule with `iwatobi dfir-timeline -f <log> -r <rule.yml>`.
+
+The auditd loader adapts EXECVE argument literal types and the known original shutdown-rule
+selection shape in memory. The shutdown adapter checks the executable and exact `a1` runlevel;
+field names and unrelated argument text cannot supply its shutdown evidence. SigmaHQ files remain
+unchanged for synchronization. See DESIGN amendment A23 for the exact scope.

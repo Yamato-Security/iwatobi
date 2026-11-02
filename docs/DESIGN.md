@@ -471,3 +471,22 @@ syslog; the journal satisfies Sysmon needs but not auditd (`live::is_linux`). Ru
 Validated against Zircolite 4.7.0 on 141 Splunk attack_data files (raw/ENRICHED auditd 79/79 per rule; Sysmon
 equal per rule after restricting Zircolite to each category's event ID, plus one 18-line event Zircolite cannot
 read).
+
+
+A23. **Auditd argument matching.** Complete EXECVE vectors are ordered by numeric argument index
+and appended to keyword matching as `CommandLine`, retaining the original record. Split arguments
+require contiguous fragment indexes and, when available, the declared byte length. Incomplete
+fragments are retained as fields without inventing an `aN` value or a complete command. Header record
+type takes precedence over any `type` in a user-space message payload.
+
+The loader converts numeric/boolean argument literals to strings in auditd selections explicitly
+guarded by `type: EXECVE`; syscall numeric fields and explicit numeric comparison modifiers retain
+their original semantics. A narrowly guarded compatibility adapter for upstream rule
+`4cb57c2f-1f29-41f8-893d-8bed8e1c1d2f` replaces its original fieldless command/runlevel keywords with
+executable-name checks and exact `a1` values `0`/`6`. It applies only to the known original selection
+shape; custom replacements remain untouched. Both normal and correlation-base rule loading use
+these adaptations through `normalize_detection`. Bundled SigmaHQ files remain verbatim.
+
+The shipped audit fixtures contain 13 earlier shutdown matches from grep arguments, all removed by
+the command-aware adaptation. Other fixture detections are retained. Earlier broad keyword-match
+comparison counts in A22 therefore include false positives addressed by A23.

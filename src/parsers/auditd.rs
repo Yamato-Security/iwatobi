@@ -288,16 +288,31 @@ impl Fields {
     }
 
     fn finish(mut self) -> (Vec<(String, FieldValue)>, Vec<String>) {
-        self.pieces.sort_by_key(|(n, i, _)| (*n, *i));
-        let mut joined: Vec<(usize, String)> = Vec::new();
-        for (n, _, text) in self.pieces.drain(..) {
-            match joined.last_mut() {
-                Some((last, acc)) if *last == n => acc.push_str(&text),
-                _ => joined.push((n, text)),
-            }
+        let mut groups = std::collections::BTreeMap::<usize, Vec<(usize, String)>>::new();
+        for (n, index, text) in self.pieces.drain(..) {
+            groups.entry(n).or_default().push((index, text));
         }
-        for (n, text) in joined {
-            self.push(&format!("a{n}"), FieldValue::Str(text));
+        for (n, mut parts) in groups {
+            parts.sort_by_key(|(index, _)| *index);
+            let text = parts
+                .iter()
+                .map(|(_, text)| text.as_str())
+                .collect::<String>();
+            let contiguous = parts
+                .iter()
+                .enumerate()
+                .all(|(expected, (actual, _))| expected == *actual);
+            let length_matches = self
+                .get_str(&format!("a{n}_len"))
+                .and_then(|s| s.parse::<usize>().ok())
+                .is_none_or(|expected| expected == text.len());
+            if contiguous && length_matches {
+                self.push(&format!("a{n}"), FieldValue::Str(text));
+            } else {
+                for (index, text) in parts {
+                    self.push(&format!("a{n}[{index}]"), FieldValue::Str(text));
+                }
+            }
         }
         (self.list, self.decoded)
     }
@@ -448,7 +463,21 @@ pub fn parse_record(text: &str) -> Option<Record> {
             fields.push("SYSCALL", FieldValue::Str(name));
         }
     }
-    let (mut fields, decoded) = fields.finish();
+    let (mut fields, mut decoded) = fields.finish();
+    // Header identity remains authoritative even when a user-space msg payload
+    // contains a field named type.
+    fields.retain(|(key, _)| key != "type");
+    fields.insert(
+        0,
+        ("type".to_owned(), FieldValue::Str(record_type.to_owned())),
+    );
+    if record_type == "EXECVE"
+        && let Some(command) = complete_command_line(&fields)
+    {
+        fields.retain(|(key, _)| key != "CommandLine");
+        fields.push(("CommandLine".to_owned(), FieldValue::Str(command.clone())));
+        decoded.push(format!("CommandLine=\"{command}\""));
+    }
     if let Some(serial) = serial {
         fields.push(("serial".to_string(), FieldValue::Int(serial)));
     }
@@ -460,6 +489,42 @@ pub fn parse_record(text: &str) -> Option<Record> {
         fields,
         decoded,
     })
+}
+
+/// Join only a complete argv vector. Missing indexes must not fabricate adjacency
+/// between separated arguments, and argc never determines an allocation size.
+fn complete_command_line(fields: &[(String, FieldValue)]) -> Option<String> {
+    let argc = fields
+        .iter()
+        .find(|(key, _)| key == "argc")
+        .and_then(|(_, v)| match v {
+            FieldValue::Int(n) => usize::try_from(*n).ok(),
+            _ => None,
+        })?;
+    let mut args: Vec<_> = fields
+        .iter()
+        .filter_map(|(key, value)| {
+            let (index, part) = execve_arg(key)?;
+            (part.is_none() && key == &format!("a{index}")).then_some((index, value.render()))
+        })
+        .collect();
+    if argc == 0 || args.len() != argc {
+        return None;
+    }
+    args.sort_by_key(|(index, _)| *index);
+    if args
+        .iter()
+        .enumerate()
+        .any(|(expected, (actual, _))| expected != *actual)
+    {
+        return None;
+    }
+    Some(
+        args.into_iter()
+            .map(|(_, text)| text)
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }
 
 /// Build the event of an audit record. `fallback` and `fallback_host` are the time and host of the
@@ -578,6 +643,27 @@ mod tests {
 
     fn s(v: &str) -> FieldValue {
         FieldValue::Str(v.to_string())
+    }
+
+    #[test]
+    fn reconstructed_argv_is_ordered_and_never_fills_missing_fragments() {
+        let f = fields(r#"type=EXECVE msg=audit(1:2): argc=3 a2="last" a0="command" a1="first""#);
+        assert_eq!(get(&f, "CommandLine"), Some(&s("command first last")));
+        for line in [
+            r#"type=EXECVE msg=audit(1:2): argc=3 a0="command" a2="last""#,
+            r#"type=EXECVE msg=audit(1:2): argc=3 a0="sysctl" a1="-w" a2[0]="kernel.randomize" a2[2]="_va_space=0""#,
+            r#"type=EXECVE msg=audit(1:2): argc=3 a0="sysctl" a1="-w" a2_len=100 a2[0]="kernel.randomize" a2[1]="_va_space=0""#,
+            r#"type=EXECVE msg=audit(1:2): argc=9223372036854775807 a0="command""#,
+        ] {
+            let f = fields(line);
+            assert!(get(&f, "CommandLine").is_none(), "{f:?}");
+        }
+    }
+    #[test]
+    fn user_message_fields_cannot_replace_the_audit_record_type() {
+        let f = fields("type=USER msg=audit(1:2): msg='type=EXECVE argc=2 a0=init a1=0'");
+        assert_eq!(get(&f, "type"), Some(&s("USER")));
+        assert!(get(&f, "CommandLine").is_none());
     }
 
     #[test]

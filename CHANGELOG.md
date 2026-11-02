@@ -2,6 +2,10 @@
 
 ## 0.2.0 [xxxx/xx/xx]
 
+**Bug Fixes:**
+
+- Auditd: reconstruct complete EXECVE command lines for keyword matching, adapt numeric argument literals without changing numeric syscall fields, and prevent shutdown false positives with executable/runlevel-aware rule compatibility. Preserve incomplete argument fragments and keep the header record type authoritative. Bundled SigmaHQ rules stay unchanged. (@YamatoSecurity)
+
 **New Features:**
 
 - Linux audit logs: `audit.log` in the raw and ENRICHED formats, `ausearch -i` output and records forwarded to syslog by `audisp-syslog`, one event per record for the Sigma `service: auditd` rules. Hex-encoded values (`proctitle`, `EXECVE` arguments, `name`, `cwd`, ...) are decoded and split arguments joined, so field and keyword rules see the text `ausearch -i` shows; raw records get the `SYSCALL` name from the x86_64 / aarch64 system call number. (@YamatoSecurity)

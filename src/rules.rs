@@ -174,6 +174,7 @@ pub fn load_rules(path: &Path, filters: &RuleFilters) -> RuleSet {
 ///   (`'|all'`, `'|contains|all'`, `'|re'`) rewritten to `raw|<modifiers>`, with `contains`
 ///   inserted when the chain has no match modifier. Keys with a real field name are untouched.
 pub fn normalize_detection(doc: &mut Value) {
+    normalize_auditd(doc);
     let Some(detection) = doc.get_mut("detection").and_then(Value::as_mapping_mut) else {
         return;
     };
@@ -182,6 +183,105 @@ pub fn normalize_detection(doc: &mut Value) {
             continue;
         }
         normalize_selection(value);
+    }
+}
+
+/// Compatibility adaptations are applied in memory; bundled upstream rules stay
+/// byte-for-byte intact for future synchronizations.
+fn normalize_auditd(doc: &mut Value) {
+    if doc
+        .get("logsource")
+        .and_then(|v| v.get("service"))
+        .and_then(Value::as_str)
+        != Some("auditd")
+    {
+        return;
+    }
+    let shutdown = doc
+        .get("id")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.eq_ignore_ascii_case("4cb57c2f-1f29-41f8-893d-8bed8e1c1d2f"));
+    let Some(detection) = doc.get_mut("detection").and_then(Value::as_mapping_mut) else {
+        return;
+    };
+    let keywords = |value: Option<&Value>, words: &[&str]| {
+        value.and_then(Value::as_sequence).is_some_and(|items| {
+            items.len() == words.len()
+                && items.iter().zip(words).all(|(v, w)| v.as_str() == Some(*w))
+        })
+    };
+    // The upstream rule's fieldless [0,6] selection matches a0's field name.
+    // Adapt only its known original shape, avoiding changes to customized rules.
+    if shutdown
+        && keywords(detection.get("init"), &["init", "telinit"])
+        && keywords(
+            detection.get("shutdowncmd"),
+            &["shutdown", "reboot", "halt", "poweroff"],
+        )
+        && detection.get("initselection")
+            == Some(&Value::Sequence(vec![
+                Value::Number(0.into()),
+                Value::Number(6.into()),
+            ]))
+    {
+        let selection = |field: &str, value: Value| {
+            Value::Mapping(Mapping::from_iter([(Value::String(field.into()), value)]))
+        };
+        detection.insert(
+            Value::String("init".into()),
+            selection("a0|re", Value::String(r"(^|/)(init|telinit)$".into())),
+        );
+        detection.insert(
+            Value::String("shutdowncmd".into()),
+            selection(
+                "a0|re",
+                Value::String(r"(^|/)(shutdown|reboot|halt|poweroff)$".into()),
+            ),
+        );
+        detection.insert(
+            Value::String("initselection".into()),
+            selection(
+                "a1",
+                Value::Sequence(vec![Value::String("0".into()), Value::String("6".into())]),
+            ),
+        );
+    }
+    fn strings(value: &mut Value) {
+        match value {
+            Value::Number(n) => *value = Value::String(n.to_string()),
+            Value::Bool(b) => *value = Value::String(b.to_string()),
+            Value::Sequence(items) => items.iter_mut().for_each(strings),
+            _ => {}
+        }
+    }
+    fn arguments(value: &mut Value) {
+        match value {
+            Value::Mapping(fields)
+                if fields.get("type").and_then(Value::as_str) == Some("EXECVE") =>
+            {
+                for (key, value) in fields.iter_mut() {
+                    let Some(key) = key.as_str() else {
+                        continue;
+                    };
+                    let mut parts = key.split('|');
+                    let field = parts.next().unwrap_or_default();
+                    if field
+                        .strip_prefix('a')
+                        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                        && !parts.any(|m| matches!(m, "gt" | "gte" | "lt" | "lte"))
+                    {
+                        strings(value);
+                    }
+                }
+            }
+            Value::Sequence(items) => items.iter_mut().for_each(arguments),
+            _ => {}
+        }
+    }
+    for (key, value) in detection.iter_mut() {
+        if key.as_str() != Some("condition") {
+            arguments(value);
+        }
     }
 }
 
@@ -2469,5 +2569,45 @@ detection:
         let mut other = Event::new();
         other.insert("raw", "number 4625 inside");
         assert!(!rule.is_match(&other));
+    }
+    #[test]
+    fn auditd_argument_numbers_are_strings_without_affecting_other_numeric_fields() {
+        let mut doc = parse_doc(
+            "title: t\nlogsource: {product: linux, service: auditd}\ndetection:\n  command:\n    type: EXECVE\n    a1: [777, 'u+s']\n    uid: 0\n  syscall:\n    type: SYSCALL\n    a0: 40000\n  condition: command or syscall\n",
+        );
+        normalize_detection(&mut doc);
+        assert_eq!(doc["detection"]["command"]["a1"][0].as_str(), Some("777"));
+        assert_eq!(doc["detection"]["command"]["uid"].as_i64(), Some(0));
+        assert_eq!(doc["detection"]["syscall"]["a0"].as_i64(), Some(40000));
+        let once = doc.clone();
+        normalize_detection(&mut doc);
+        assert_eq!(once, doc);
+        let mut other = parse_doc(
+            "title: t\nlogsource: {product: linux, service: syslog}\ndetection:\n  command: {type: EXECVE, a1: 777}\n  condition: command\n",
+        );
+        normalize_detection(&mut other);
+        assert_eq!(other["detection"]["command"]["a1"].as_i64(), Some(777));
+    }
+    #[test]
+    fn shutdown_compatibility_does_not_overwrite_custom_selection_shapes() {
+        let original = include_str!(
+            "../rules/sigma/linux/auditd/execve/lnx_auditd_system_shutdown_reboot.yml"
+        );
+        let mut doc = parse_doc(original);
+        normalize_detection(&mut doc);
+        assert!(doc["detection"]["init"].is_mapping());
+        assert_eq!(
+            doc["detection"]["initselection"]["a1"][0].as_str(),
+            Some("0")
+        );
+        let once = doc.clone();
+        normalize_detection(&mut doc);
+        assert_eq!(doc, once);
+        let mut custom = parse_doc(original);
+        let replacement = parse_doc("a2: '6'");
+        custom["detection"]["initselection"] = replacement.clone();
+        normalize_detection(&mut custom);
+        assert_eq!(custom["detection"]["initselection"], replacement);
+        assert!(custom["detection"]["init"].is_sequence());
     }
 }

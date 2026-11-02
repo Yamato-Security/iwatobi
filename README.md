@@ -202,6 +202,14 @@ record's fields under their own names (`type`, `a0`, `a1`, ..., `exe`, `comm`, `
   `ausearch` and carry no zone: set it with `-z`.
 - A `node=` prefix is used as the host name.
 
+Complete `EXECVE` argument vectors also provide a reconstructed `CommandLine` for keyword rules.
+Incomplete or inconsistent split arguments retain their fragments without synthesizing a complete
+command. Argument literals in explicitly EXECVE-typed auditd selections are matched as strings;
+numeric SYSCALL fields keep their numeric types. The bundled shutdown rule has an in-memory
+compatibility adaptation that checks the executable and exact `a1` runlevel (`0` or `6`), avoiding
+matches on field names or command names inside unrelated arguments. The original log line and the
+upstream rule files remain unchanged.
+
 Sysmon for Linux events are read from syslog lines (`... sysmon: <Event>...`), the journal, or files
 with one `<Event>` per line (an event whose command line contains a newline is joined back into one
 event). The `EventData` fields keep their names (`Image`, `CommandLine`, `ParentImage`,

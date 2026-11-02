@@ -373,7 +373,8 @@ fn auditd_fixtures() {
     let c = count_by_title(&rows);
     // raw/find_ssh_files.log 2 + the hex-encoded `grep -ri "my password"` of synthetic/audit.log
     expect(&c, CREDS, 3);
-    expect(&c, "System Shutdown/Reboot - Linux", 13);
+    // These fixtures contain grep patterns naming shutdown tools, not their execution.
+    expect(&c, "System Shutdown/Reboot - Linux", 0);
     expect(&c, "Hidden Files and Directories", 1);
     // ENRICHED records (0x1D separator)
     expect(&c, "Modification of ld.so.preload", 4);
@@ -389,7 +390,7 @@ fn auditd_fixtures() {
     // synthetic: SYSCALL name from the x86_64 number, a split EXECVE argument, aarch64 memfd_create
     expect(&c, ASLR, 2);
     expect(&c, "Audio Capture", 1);
-    assert_eq!(rows.len(), 39);
+    assert_eq!(rows.len(), 26);
     assert!(rows.iter().all(|r| r["LogSource"] == "linux/auditd"));
     let creds = rows
         .iter()
@@ -1228,4 +1229,110 @@ fn bad_custom_formats_and_unknown_format_names_are_errors() {
         out.contains("php-fpm, auditd, sysmon-linux, shop-nginx, intranet-apache, vpnd"),
         "{out}"
     );
+}
+
+#[test]
+fn auditd_bpfdoor_keywords_match_reconstructed_adjacent_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let lines = [
+        r#"type=EXECVE msg=audit(1723042099.699:1): argc=5 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="42392""#,
+        "type=EXECVE msg=audit(04/16/2025 08:20:23.552:2) : argc=5 a0=iptables a1=-t a2=nat a3=--to-ports a4=43123",
+        r#"type=EXECVE msg=audit(1723042099.699:3): argc=5 a0=69707461626C6573 a1="-t" a2="nat" a3=2D2D746F2D706F727473 a4="42392""#,
+        r#"type=EXECVE msg=audit(1723042099.699:4): argc=6 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="unrelated" a5="42392""#,
+        r#"type=EXECVE msg=audit(1723042099.699:5): argc=5 a0="iptables" a1="-t" a2="nat" a3="--to-ports" a4="99999""#,
+        r#"type=EXECVE msg=audit(1723042099.699:6): argc=6 a0="iptables" a1="-t" a2="nat" a4="--to-ports" a5="42392""#,
+    ];
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_bpfdoor_port_redirect.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 3, "{rows:#?}");
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["LineNumber"].as_u64().unwrap())
+            .collect::<std::collections::BTreeSet<_>>(),
+        [1, 2, 3].into_iter().collect()
+    );
+    assert!(rows.iter().all(|r| {
+        r["Details"]["CommandLine"]
+            .as_str()
+            .unwrap()
+            .contains("--to-ports 4")
+    }));
+}
+
+#[test]
+fn auditd_numeric_execve_argument_rule_keeps_string_semantics() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    std::fs::write(
+        &input,
+        [
+            r#"type=EXECVE msg=audit(1723042099.699:1): argc=3 a0="chmod" a1="777" a2="file""#,
+            "type=EXECVE msg=audit(04/16/2025 08:20:23.552:2) : argc=3 a0=chmod a1=777 a2=file",
+            r#"type=EXECVE msg=audit(1723042099.699:3): argc=3 a0="chmod" a1="755" a2="file""#,
+            r#"type=EXECVE msg=audit(1723042099.699:4): argc=3 a0="chmod" a1="7770" a2="file""#,
+        ]
+        .join("\n"),
+    )
+    .unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_susp_cmds.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 2, "{rows:#?}");
+    assert!(rows.iter().all(|r| r["Details"]["a1"] == "777"));
+}
+
+#[test]
+fn auditd_shutdown_rule_requires_the_executable_and_exact_runlevel() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("audit.log");
+    let commands = [
+        ("init", "0"),
+        ("telinit", "6"),
+        ("/sbin/init", "6"),
+        ("shutdown", "-h"),
+        ("reboot", ""),
+        ("telinit", "3"),
+        ("init", "--help"),
+        ("init", "60"),
+        ("telinit", "16"),
+        ("echo", "reboot"),
+        ("echo", "init 0"),
+    ];
+    let mut lines: Vec<_> = commands
+        .iter()
+        .enumerate()
+        .map(|(i, (a, b))| {
+            format!(
+                "type=EXECVE msg=audit(1723042099.699:{}): argc=2 a0=\"{a}\" a1=\"{b}\"",
+                i + 1
+            )
+        })
+        .collect();
+    lines.push(
+        "type=USER msg=audit(1723042099.699:20): msg='type=EXECVE argc=2 a0=init a1=0'".into(),
+    );
+    std::fs::write(&input, lines.join("\n")).unwrap();
+    let (_, rows) = scan_jsonl(
+        "-f",
+        input.to_str().unwrap(),
+        &[
+            "-r",
+            "rules/sigma/linux/auditd/execve/lnx_auditd_system_shutdown_reboot.yml",
+        ],
+    );
+    assert_eq!(rows.len(), 5, "{rows:#?}");
+    assert!(rows.iter().all(|r| r["LineNumber"].as_u64().unwrap() <= 5));
 }

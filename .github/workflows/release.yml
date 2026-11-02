@@ -103,11 +103,16 @@ jobs:
         run: |
           bin=$(ls release-binaries/iwatobi-* | head -1)
           cp -r test_files/linux "$RUNNER_TEMP/logs"
+          cp -r test_files/auditd "$RUNNER_TEMP/logs/auditd"
           cd "$RUNNER_TEMP"
           "$GITHUB_WORKSPACE/$bin" --version
           "$GITHUB_WORKSPACE/$bin" dfir-timeline -d logs -q -K -w -Q -N -z UTC | tee out.txt
-          grep -q "Total detection rules: 16" out.txt
+          # The packaged rules are found and complete: as many rules load as from the repository.
+          want=$("$GITHUB_WORKSPACE/$bin" dfir-timeline -d logs -r "$GITHUB_WORKSPACE/rules" -q -K -w -Q -N -z UTC | grep "Total detection rules:")
+          echo "Repository: $want"
+          grep -qF "$want" out.txt
           grep -q "Modifying Crontab" out.txt
+          grep -q "Modification of ld.so.preload" out.txt
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

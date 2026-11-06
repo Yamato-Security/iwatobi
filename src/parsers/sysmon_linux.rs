@@ -88,12 +88,14 @@ fn typed(value: &str) -> FieldValue {
     }
 }
 
-fn attribute(e: &BytesStart<'_>, name: &str, reader: &Reader<&[u8]>) -> Option<String> {
-    e.try_get_attribute(name)
-        .ok()
-        .flatten()
-        .and_then(|a| a.decode_and_unescape_value(reader.decoder()).ok())
-        .map(|v| v.into_owned())
+/// An attribute's value with its entity and character references resolved (no whitespace
+/// normalization, so the value is what the event carried).
+fn attribute(e: &BytesStart<'_>, name: &str) -> Option<String> {
+    e.try_get_attribute(name).ok().flatten().and_then(|a| {
+        quick_xml::escape::unescape(&a.value)
+            .ok()
+            .map(|v| v.into_owned())
+    })
 }
 
 /// Parse one Sysmon event document.
@@ -112,20 +114,20 @@ pub fn parse_event(xml: &str) -> Result<SysmonEvent, String> {
     loop {
         match reader.read_event().map_err(|e| e.to_string())? {
             Event::Start(e) => {
-                let name = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+                let name = e.local_name().as_ref().to_owned();
                 text.clear();
                 if name == "Data" {
-                    data_name = Some(attribute(&e, "Name", &reader).unwrap_or_default());
+                    data_name = Some(attribute(&e, "Name").unwrap_or_default());
                 }
                 stack.push(name);
             }
             Event::Empty(e) => {
-                let name = String::from_utf8_lossy(e.local_name().as_ref()).into_owned();
+                let name = e.local_name().as_ref().to_owned();
                 match name.as_str() {
-                    "Provider" => provider = attribute(&e, "Name", &reader),
-                    "TimeCreated" => time_created = attribute(&e, "SystemTime", &reader),
+                    "Provider" => provider = attribute(&e, "Name"),
+                    "TimeCreated" => time_created = attribute(&e, "SystemTime"),
                     "Data" => {
-                        if let Some(n) = attribute(&e, "Name", &reader) {
+                        if let Some(n) = attribute(&e, "Name") {
                             data.push((n, String::new()));
                         }
                     }
@@ -133,14 +135,14 @@ pub fn parse_event(xml: &str) -> Result<SysmonEvent, String> {
                 }
             }
             Event::Text(t) => {
-                let decoded = t.decode().map_err(|e| e.to_string())?;
-                text.push_str(&quick_xml::escape::unescape(&decoded).map_err(|e| e.to_string())?);
+                let raw = t.into_inner();
+                text.push_str(&quick_xml::escape::unescape(&raw).map_err(|e| e.to_string())?);
             }
             Event::CData(t) => {
-                text.push_str(&t.decode().map_err(|e| e.to_string())?);
+                text.push_str(&t.into_inner());
             }
             Event::GeneralRef(r) => {
-                let entity = format!("&{};", r.decode().map_err(|e| e.to_string())?);
+                let entity = format!("&{};", r.into_inner());
                 text.push_str(&quick_xml::escape::unescape(&entity).map_err(|e| e.to_string())?);
             }
             Event::End(_) => {

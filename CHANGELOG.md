@@ -1,6 +1,6 @@
 # Changes
 
-## 1.0.0 [2026/11/02] - CODE BLUE Release
+## 1.0.0 [2026/11/06] - CODE BLUE Release
 
 **New Features:**
 
@@ -11,6 +11,7 @@
 **Other Changes:**
 
 - License: Iwatobi is now copyright Shirofune Security Co., Ltd. and released under the Reciprocal Public License 1.5 (RPL-1.5) instead of the AGPLv3; every source file carries the copyright and the RPL License Notice. (@YamatoSecurity)
+- Updated the Rust crates, including `quick-xml` 0.42. (@YamatoSecurity)
 
 ## 0.1.0 [2026/10/27] - Vulnpocalypse Release
 

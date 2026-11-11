@@ -8,3 +8,6 @@
 .idea/
 .vscode/
 /.claude/
+
+# Local environment files may contain secrets.
+.env

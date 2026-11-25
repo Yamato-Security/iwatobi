@@ -217,6 +217,14 @@ pub struct FilterOption {
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct OutputOption {
+    /// Write a profile-independent forensic JSON bundle (never overwritten; offline files only)
+    #[arg(long, value_name = "FILE", conflicts_with = "live_analysis")]
+    pub forensic_output: Option<PathBuf>,
+
+    /// Explicit acquisition/source bindings for the forensic bundle (see docs/UAC_CONTRACT.md)
+    #[arg(long, value_name = "FILE", requires = "forensic_output")]
+    pub evidence_manifest: Option<PathBuf>,
+
     /// Save the results to a file. The extension is set to the output type (ex: -o timeline -t csv,jsonl writes timeline.csv and timeline.jsonl)
     #[arg(help_heading = Some("Output"), short, long, value_name = "FILE", display_order = 300)]
     pub output: Option<PathBuf>,

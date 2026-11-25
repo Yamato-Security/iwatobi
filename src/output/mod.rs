@@ -1004,6 +1004,7 @@ mod tests {
             ],
             falsepositives: vec!["Unknown".to_string()],
             rule_file: "lnx_sshd_susp_ssh.yml".to_string(),
+            source: None,
         }
     }
 
@@ -1427,6 +1428,7 @@ mod tests {
             summary: summary.to_string(),
             file: std::sync::Arc::from("apache2/access.log"),
             line: 0,
+            native: None,
         };
         let members = [
             member(

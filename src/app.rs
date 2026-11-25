@@ -135,13 +135,14 @@ pub fn run(opts: &TimelineOptions) -> i32 {
     };
 
     // --- custom log formats --------------------------------------------------------------
-    let custom_formats = match load_custom_formats(opts.input.custom_formats.as_deref()) {
-        Ok(r) => Arc::new(r),
-        Err(e) => {
-            error_msg(no_color, &e);
-            return 1;
-        }
-    };
+    let (custom_formats, custom_formats_text) =
+        match load_custom_formats(opts.input.custom_formats.as_deref()) {
+            Ok((r, text)) => (Arc::new(r), text),
+            Err(e) => {
+                error_msg(no_color, &e);
+                return 1;
+            }
+        };
     let forced_format = match &opts.input.log_format {
         None => None,
         Some(name) => match LogFormat::from_name(name)
@@ -185,6 +186,17 @@ pub fn run(opts: &TimelineOptions) -> i32 {
         exclude_status: lower(&opts.filter.exclude_status),
         include_tag: lower(&opts.filter.include_tag),
         exclude_tag: lower(&opts.filter.exclude_tag),
+    };
+    let rule_inventory = if opts.output.forensic_output.is_some() {
+        match crate::forensic::rule_inventory(&rules_path) {
+            Ok(r) => r,
+            Err(e) => {
+                error_msg(no_color, &e.to_string());
+                return 1;
+            }
+        }
+    } else {
+        BTreeMap::new()
     };
     let ruleset = rules::load_rules(&rules_path, &filters);
     print_rule_stats(&ruleset, no_color);
@@ -292,7 +304,7 @@ pub fn run(opts: &TimelineOptions) -> i32 {
                 .into_iter()
                 .map(|(_, p)| absolute(&p))
                 .collect();
-        if opts.input.filepath.is_some()
+        if (opts.input.filepath.is_some() || opts.output.forensic_output.is_some())
             && targets.iter().any(|t| outputs.contains(&absolute(&t.path)))
         {
             error_msg(
@@ -316,6 +328,42 @@ pub fn run(opts: &TimelineOptions) -> i32 {
         error_msg(no_color, "No log files to scan.");
         return 1;
     }
+
+    let forensic = match &opts.output.forensic_output {
+        Some(path) => {
+            if let Some(out) = &opts.output.output
+                && resolve_output_targets(out, &opts.output.output_types)
+                    .iter()
+                    .any(|(_, p)| absolute(p) == absolute(path))
+            {
+                error_msg(no_color, "Forensic and native output paths must differ.");
+                return 1;
+            }
+            let settings = serde_json::json!({"arguments": std::env::args().collect::<Vec<_>>(),
+                "working_directory": std::env::current_dir().ok(), "timezone": tz.to_string(),
+                "local_timezone_requires_same_environment": tz == crate::parsers::TzAssumption::Local,
+                "time_start": time_filter.start.map(|t| t.to_rfc3339()),
+                "time_end": time_filter.end.map(|t| t.to_rfc3339()), "time_bounds": "inclusive",
+                "custom_formats_yaml": custom_formats_text, "rule_filters": format!("{filters:?}"),
+                "rules_loaded": ruleset.stats.loaded, "rules_failed": ruleset.stats.failed,
+                "forced_format": opts.input.log_format});
+            match crate::forensic::Export::new(
+                path,
+                opts.output.evidence_manifest.as_deref(),
+                &targets,
+                &rules_path,
+                rule_inventory,
+                settings,
+            ) {
+                Ok(e) => Some(e),
+                Err(e) => {
+                    error_msg(no_color, &e.to_string());
+                    return 1;
+                }
+            }
+        }
+        None => None,
+    };
 
     // --- writers -------------------------------------------------------------------------------
     let writers = match Writers::new(
@@ -363,12 +411,14 @@ pub fn run(opts: &TimelineOptions) -> i32 {
 
     // --- scan ------------------------------------------------------------------------------------
     let scan_opts = ScanOptions {
+        retain_members: forensic.is_some(),
         tz,
         hostname_hint,
         time_filter,
         custom_formats,
     };
     let state = Arc::new(Mutex::new(ScanState {
+        forensic,
         writers,
         summary: Summary::default(),
         base_hits: Vec::new(),
@@ -406,6 +456,9 @@ pub fn run(opts: &TimelineOptions) -> i32 {
             report_file(target, &result, verbose || single_file, no_color)
         });
         let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(export) = &mut st.forensic {
+            export.source(target, &result, ruleset_ref);
+        }
         consume_result(&mut st, result, ruleset_ref, profile_ref, opts_ref);
         if let Some(b) = &bar {
             b.inc(1);
@@ -504,6 +557,9 @@ pub fn run(opts: &TimelineOptions) -> i32 {
                 continue;
             }
             let members: Vec<&BaseHit> = hit.members.iter().map(|i| &st.base_hits[*i]).collect();
+            if let Some(export) = &mut st.forensic {
+                export.correlation(hit, &members, &ruleset);
+            }
             let row = render_correlation(hit, &members, &corr.meta, &render_profile, &render_opts);
             let date = output::format_timestamp(&hit.timestamp, render_opts.utc);
             st.summary.record(
@@ -518,6 +574,12 @@ pub fn run(opts: &TimelineOptions) -> i32 {
     }
     if let Err(e) = st.writers.finish() {
         fatal_error(no_color, &e);
+    }
+    if let Some(export) = st.forensic.take()
+        && let Err(e) = export.finish(st.summary.correlation_hits_skipped, &ruleset)
+    {
+        error_msg(no_color, &format!("Forensic export failed: {e}"));
+        return 1;
     }
     report_formats(&st, no_color);
     if st.mixed_zone_files > 0 && opts.general.timezone.is_none() {
@@ -546,6 +608,7 @@ pub fn run(opts: &TimelineOptions) -> i32 {
 }
 
 struct ScanState {
+    forensic: Option<crate::forensic::Export>,
     writers: Writers,
     summary: Summary,
     base_hits: Vec<BaseHit>,
@@ -559,6 +622,7 @@ struct ScanState {
 impl ScanState {
     fn empty() -> Self {
         Self {
+            forensic: None,
             writers: Writers::empty(),
             summary: Summary::default(),
             base_hits: Vec::new(),
@@ -606,7 +670,7 @@ fn consume_result(
 }
 
 /// The custom log formats: `--custom-formats FILE`, or `config/custom_log_formats.yaml`.
-fn load_custom_formats(path: Option<&Path>) -> Result<FormatRegistry, String> {
+fn load_custom_formats(path: Option<&Path>) -> Result<(FormatRegistry, String), String> {
     let (text, name) = match path {
         Some(p) => (
             std::fs::read_to_string(p).map_err(|e| {
@@ -622,7 +686,9 @@ fn load_custom_formats(path: Option<&Path>) -> Result<FormatRegistry, String> {
             "config/custom_log_formats.yaml".to_string(),
         ),
     };
-    FormatRegistry::parse(&text).map_err(|e| format!("{name}: {e}"))
+    FormatRegistry::parse(&text)
+        .map(|r| (r, text))
+        .map_err(|e| format!("{name}: {e}"))
 }
 
 /// After the scan: the access log layouts that were detected automatically (so that a wrong

@@ -34,6 +34,10 @@ honeypot evidence of confirmed remote code execution.
 
 ## ✨ Features
 
+- **Forensic interchange**: opt-in structured detection/member references for
+  manifest-bound original logs, with provenance and explicit unresolved evidence.
+  See the [UAC detection contract](docs/UAC_CONTRACT.md); native Sigma inputs and
+  existing output profiles are unchanged.
 - **One command, three inputs**: `dfir-timeline` scans a single file (`-f`), a directory tree
   (`-d`, rotated `.1` / `.2.gz` files included) or the **live system** (`-l`), where Iwatobi finds
   the log files the loaded rules need, asks you for a directory when a log source is missing (or

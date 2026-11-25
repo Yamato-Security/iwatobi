@@ -168,3 +168,66 @@ wrong-hash and different-acquisition controls did not join. Native outputs were
 identical with the exporter enabled/disabled and original byte hashes were
 unchanged. This is focused compatibility evidence, not a production linker or
 universal corpus qualification.
+
+### Real-source qualification and local review revision
+
+Implementation commit `122af7e70b1ae095bd8d3a1842cc368b05ec67d4` is byte-for-byte
+the tested implementation patch against upstream
+`f3b966199cd4b7ceb6d7b3012eafcd04058725cc`. Its binary Git diff has SHA-256
+`6a8849c324591162954dabd6df23ffa81e4bc6485b9461ee46aed9938a8f6e15`.
+Subsequent qualification documentation does not change that implementation.
+
+The [qualification record](https://ampcode.com/artifacts/uac-interoperability-qualification-e08885c8-4154-466b-92e8-406afee8865c)
+retains sample permission/provenance, exact tool/rule pins, earlier negative
+results, commands, hashes, measurements and representative matches. Its final
+three-source replay used the publicly shared DFIRmadness Case002 Tyler Hudak
+Apache honeypot collection, a genuine captured attacker dataset, not an injected
+fixture. Sample archive SHA-256 is
+`071de8ec88b681139406aa48d2aba292b7876ee6ab559c69e41b39a436ded0f6`.
+No collected artifacts were executed or committed here.
+
+The unchanged native Iwatobi result bundle has SHA-256
+`02f95ad7a80a95a54dc82f42738093111ccdb558b15324797266915ce9d4e0dd`.
+The scoped results contain 598 alerts and 611 members from shipped rules:
+18 access-log correlation members, 443 Apache error members and 150 syslog
+crontab-replacement members. All 611 matched exactly one exported observation;
+there were zero ambiguous, partial or unresolved attachments within this scope.
+No Sigma rerun, custom rules, record injection, tuple aliasing or guessed links
+were needed. Another 1,250 members remain outside the three-source scope.
+
+The consumer was TraceQuarry upstream
+`e6a79d13c9e7d9c0e33ce4a4789a6b3eb1c20bf2` plus full replacement patch SHA-256
+`6ec987ca07e8c8b7ac8c5c0943f1eea370d2f0d56bc57d7190ff4f7f4d26e2fe`,
+using its public `--parse-only` CLI with orjson 3.13.0. The whole original error
+log emitted 489,851 observations in 57.39 seconds with 29,744 KiB peak RSS under
+a 1 GiB address-space guard. The three files emitted 507,605 observations in
+total. Every exported raw record was checked against its original physical line;
+member timestamps and typed Apache fields agreed. Original hashes/mtimes and
+completion/output hashes were verified. Identical POST lines remained distinct
+physical occurrences. Shared occurrence support does not prove a rule's broader
+attack hypothesis or successful execution.
+
+This qualifies parse-only export, not full-analysis/enrichment scalability.
+The prior whole-analysis error-log exit-137 failure remains recorded separately.
+There are still 605 uninterpreted access lines and 1,711 uninterpreted syslog
+lines; their source coverage is explicitly partial. The earlier full-acquisition
+1,861-unresolved baseline, parser-only chunk results and earlier Dissect APT
+zero-fact limitation remain separate in the qualification record.
+
+Reproduction material is retained outside the Iwatobi checkout in the
+qualification workspace, not bundled with this tool:
+
+- `hudak_parse_only_replay.py`, SHA-256
+  `a0b2c7594de70bb53e0618f12d320a057a1e65dfe7d866cd4549cd29c7c190eb`;
+- `hudak_parse_only_qualify.py`, SHA-256
+  `e2b7d6d152f16269918ebc8438187c0e27b2bd654d3eb7d1ce88c23726d126a2`;
+- `hudak-parse-only-6ec987c/commands.json`, manifests, resource logs,
+  `qualification.json` (SHA-256
+  `eb301511b33e4d89c32062c4a01f760e6aca1af0a213e0467f641b4e0d57c560`)
+  and `comparison.json` (SHA-256
+  `8f8b1fed6f779424c17fcf488ae13cdb29979418462d54d3c9389f3dc0da01e9`).
+
+Before local review commits, `cargo fmt --check`, `cargo test --locked`
+(396 unit tests and 40 CLI tests), and
+`cargo clippy --locked --all-targets -- -D warnings` passed. No sample evidence,
+large output files or TraceQuarry implementation is part of these commits.

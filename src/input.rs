@@ -254,7 +254,7 @@ impl<R: Read> Iterator for Lines<R> {
 
 /// One raw line as text: NUL bytes dropped (zero-filled blocks), lossy UTF-8, the newline / CR
 /// removed and, on the first line of a file, a UTF-8 byte order mark.
-fn decode_line(buf: &[u8], first: bool) -> String {
+pub(crate) fn decode_line(buf: &[u8], first: bool) -> String {
     let text = if buf.contains(&0) {
         let clean: Vec<u8> = buf.iter().copied().filter(|b| *b != 0).collect();
         String::from_utf8_lossy(&clean).into_owned()

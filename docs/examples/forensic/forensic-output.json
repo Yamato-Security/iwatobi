@@ -1,0 +1,530 @@
+{
+  "alerts": [
+    {
+      "correlation_index": 0,
+      "count": 3,
+      "event": {
+        "kind": "alert"
+      },
+      "evidence_status": "exact",
+      "exact_members": 3,
+      "first": "2026-11-25T07:01:02+00:00",
+      "group_values": [
+        "192.0.2.17"
+      ],
+      "id": "1994dff9-b5e5-4e83-a362-a6f6e1baba5c:1",
+      "kind": "correlation",
+      "last": "2026-11-25T07:01:02+00:00",
+      "members": [
+        {
+          "base_rule_index": 0,
+          "evidence": {
+            "location": {
+              "coverage": "single_line",
+              "native_location": {
+                "file": "docs/examples/forensic/access.log",
+                "line": 1
+              },
+              "source_refs": [
+                {
+                  "collection_id": "synthetic-web-server",
+                  "exact": true,
+                  "locator": {
+                    "coordinate": "decoded_decompressed_1_based",
+                    "kind": "text_line",
+                    "line": 1
+                  },
+                  "path": "var/log/apache2/access.log",
+                  "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741"
+                }
+              ],
+              "status": "exact"
+            },
+            "native": {
+              "fields": [
+                {
+                  "name": "c-ip",
+                  "value": "192.0.2.17"
+                },
+                {
+                  "name": "cs-method",
+                  "value": "POST"
+                },
+                {
+                  "name": "cs-uri-query",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "sc-status",
+                  "value": 200
+                },
+                {
+                  "name": "sc-bytes",
+                  "value": 149
+                },
+                {
+                  "name": "cs-referer",
+                  "value": null
+                },
+                {
+                  "name": "cs-user-agent",
+                  "value": null
+                },
+                {
+                  "name": "cs-uri-stem",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-uri",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-version",
+                  "value": "HTTP/1.1"
+                },
+                {
+                  "name": "cs-username",
+                  "value": null
+                },
+                {
+                  "name": "cs-host",
+                  "value": null
+                },
+                {
+                  "name": "c-useragent",
+                  "value": null
+                }
+              ],
+              "hostname": null,
+              "logsource": "webserver",
+              "logsource_tags": [
+                {
+                  "category": "webserver",
+                  "product": null,
+                  "service": null
+                }
+              ],
+              "match_text": null,
+              "raw": "192.0.2.17 - - [25/Nov/2026:07:01:02 +0000] \"POST /index.php HTTP/1.1\" 200 149 \"-\" \"-\"",
+              "representation": "iwatobi_decoded_native_not_original_bytes",
+              "timestamp": "2026-11-25T07:01:02+00:00",
+              "timestamp_inferred": false,
+              "timezone_explicit": true
+            }
+          },
+          "rule": {
+            "author": "Zach Mathis (@yamatosecurity)",
+            "created": "2026-10-26",
+            "description": "Base rule of the correlation above. Not reported on its own.",
+            "false_positives": [],
+            "file": "web_rapid_posts_to_php_index.yml",
+            "id": "bbddfb19-a24d-4865-b0ee-22c7831ded7f",
+            "level": "informational",
+            "modified": null,
+            "name": "POST Request To Web Root Or PHP Index",
+            "references": [],
+            "source": {
+              "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+              "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+            },
+            "status": "experimental",
+            "tags": []
+          }
+        },
+        {
+          "base_rule_index": 0,
+          "evidence": {
+            "location": {
+              "coverage": "single_line",
+              "native_location": {
+                "file": "docs/examples/forensic/access.log",
+                "line": 2
+              },
+              "source_refs": [
+                {
+                  "collection_id": "synthetic-web-server",
+                  "exact": true,
+                  "locator": {
+                    "coordinate": "decoded_decompressed_1_based",
+                    "kind": "text_line",
+                    "line": 2
+                  },
+                  "path": "var/log/apache2/access.log",
+                  "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741"
+                }
+              ],
+              "status": "exact"
+            },
+            "native": {
+              "fields": [
+                {
+                  "name": "c-ip",
+                  "value": "192.0.2.17"
+                },
+                {
+                  "name": "cs-method",
+                  "value": "POST"
+                },
+                {
+                  "name": "cs-uri-query",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "sc-status",
+                  "value": 200
+                },
+                {
+                  "name": "sc-bytes",
+                  "value": 149
+                },
+                {
+                  "name": "cs-referer",
+                  "value": null
+                },
+                {
+                  "name": "cs-user-agent",
+                  "value": null
+                },
+                {
+                  "name": "cs-uri-stem",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-uri",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-version",
+                  "value": "HTTP/1.1"
+                },
+                {
+                  "name": "cs-username",
+                  "value": null
+                },
+                {
+                  "name": "cs-host",
+                  "value": null
+                },
+                {
+                  "name": "c-useragent",
+                  "value": null
+                }
+              ],
+              "hostname": null,
+              "logsource": "webserver",
+              "logsource_tags": [
+                {
+                  "category": "webserver",
+                  "product": null,
+                  "service": null
+                }
+              ],
+              "match_text": null,
+              "raw": "192.0.2.17 - - [25/Nov/2026:07:01:02 +0000] \"POST /index.php HTTP/1.1\" 200 149 \"-\" \"-\"",
+              "representation": "iwatobi_decoded_native_not_original_bytes",
+              "timestamp": "2026-11-25T07:01:02+00:00",
+              "timestamp_inferred": false,
+              "timezone_explicit": true
+            }
+          },
+          "rule": {
+            "author": "Zach Mathis (@yamatosecurity)",
+            "created": "2026-10-26",
+            "description": "Base rule of the correlation above. Not reported on its own.",
+            "false_positives": [],
+            "file": "web_rapid_posts_to_php_index.yml",
+            "id": "bbddfb19-a24d-4865-b0ee-22c7831ded7f",
+            "level": "informational",
+            "modified": null,
+            "name": "POST Request To Web Root Or PHP Index",
+            "references": [],
+            "source": {
+              "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+              "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+            },
+            "status": "experimental",
+            "tags": []
+          }
+        },
+        {
+          "base_rule_index": 0,
+          "evidence": {
+            "location": {
+              "coverage": "single_line",
+              "native_location": {
+                "file": "docs/examples/forensic/access.log",
+                "line": 3
+              },
+              "source_refs": [
+                {
+                  "collection_id": "synthetic-web-server",
+                  "exact": true,
+                  "locator": {
+                    "coordinate": "decoded_decompressed_1_based",
+                    "kind": "text_line",
+                    "line": 3
+                  },
+                  "path": "var/log/apache2/access.log",
+                  "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741"
+                }
+              ],
+              "status": "exact"
+            },
+            "native": {
+              "fields": [
+                {
+                  "name": "c-ip",
+                  "value": "192.0.2.17"
+                },
+                {
+                  "name": "cs-method",
+                  "value": "POST"
+                },
+                {
+                  "name": "cs-uri-query",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "sc-status",
+                  "value": 200
+                },
+                {
+                  "name": "sc-bytes",
+                  "value": 149
+                },
+                {
+                  "name": "cs-referer",
+                  "value": null
+                },
+                {
+                  "name": "cs-user-agent",
+                  "value": null
+                },
+                {
+                  "name": "cs-uri-stem",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-uri",
+                  "value": "/index.php"
+                },
+                {
+                  "name": "cs-version",
+                  "value": "HTTP/1.1"
+                },
+                {
+                  "name": "cs-username",
+                  "value": null
+                },
+                {
+                  "name": "cs-host",
+                  "value": null
+                },
+                {
+                  "name": "c-useragent",
+                  "value": null
+                }
+              ],
+              "hostname": null,
+              "logsource": "webserver",
+              "logsource_tags": [
+                {
+                  "category": "webserver",
+                  "product": null,
+                  "service": null
+                }
+              ],
+              "match_text": null,
+              "raw": "192.0.2.17 - - [25/Nov/2026:07:01:02 +0000] \"POST /index.php HTTP/1.1\" 200 149 \"-\" \"-\"",
+              "representation": "iwatobi_decoded_native_not_original_bytes",
+              "timestamp": "2026-11-25T07:01:02+00:00",
+              "timestamp_inferred": false,
+              "timezone_explicit": true
+            }
+          },
+          "rule": {
+            "author": "Zach Mathis (@yamatosecurity)",
+            "created": "2026-10-26",
+            "description": "Base rule of the correlation above. Not reported on its own.",
+            "false_positives": [],
+            "file": "web_rapid_posts_to_php_index.yml",
+            "id": "bbddfb19-a24d-4865-b0ee-22c7831ded7f",
+            "level": "informational",
+            "modified": null,
+            "name": "POST Request To Web Root Or PHP Index",
+            "references": [],
+            "source": {
+              "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+              "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+            },
+            "status": "experimental",
+            "tags": []
+          }
+        }
+      ],
+      "members_total": 3,
+      "members_truncated": false,
+      "rule": {
+        "author": "Zach Mathis (@yamatosecurity)",
+        "created": "2026-10-26",
+        "description": "Detects three or more POST requests to the web root or index.php from the same client within 60 seconds.\nThe PHP2Shell (CVE-2026-109618) exploit chain sends four large multipart POSTs (memory pressure, memory\ndisclosure, memory pressure, execution) to / or /index.php within a few seconds, typically without a\nUser-Agent header. The final request often has no access-log entry because the worker crashes, so the\nthreshold is three.",
+        "false_positives": [
+          "Forms, APIs and login pages that legitimately receive bursts of POST requests to the index page"
+        ],
+        "file": "web_rapid_posts_to_php_index.yml",
+        "id": "1f36585e-0f83-4f4b-8a5a-b0194f9f798c",
+        "level": "medium",
+        "modified": null,
+        "name": "Rapid Repeated POST Requests To PHP Index Page",
+        "references": [
+          "https://github.com/0x4D31/honeypot-data/blob/main/reports/php2shell/2026-10-24-confirmed-rce.md",
+          "https://www.wiz.io/blog/php2shell-php-rce"
+        ],
+        "source": {
+          "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+          "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+        },
+        "status": "experimental",
+        "tags": [
+          "attack.initial-access",
+          "attack.t1190",
+          "cve.2026-109618"
+        ]
+      },
+      "timestamp": "2026-11-25T07:01:02+00:00",
+      "uac": {
+        "acquisition": {
+          "id": "synthetic-example-acquisition",
+          "status": "supplied"
+        },
+        "run_id": "1994dff9-b5e5-4e83-a362-a6f6e1baba5c"
+      }
+    }
+  ],
+  "run": {
+    "cargo_lock_sha256": "2f4e01bb00a871c531c7e64b882504738ad425a13fab12a656d61b29ee0254d2",
+    "completed_at": "2026-11-27T01:31:07.005982600+00:00",
+    "correlation_hits_skipped_missing_group_by": 0,
+    "executable_sha256": "a00a2ace8df3a9b0ce6c5a8c76b82b02cdd9d3e32a280520726c399016efdb67",
+    "id": "1994dff9-b5e5-4e83-a362-a6f6e1baba5c",
+    "loaded_correlations": [
+      {
+        "base_rules": [
+          {
+            "author": "Zach Mathis (@yamatosecurity)",
+            "created": "2026-10-26",
+            "description": "Base rule of the correlation above. Not reported on its own.",
+            "false_positives": [],
+            "file": "web_rapid_posts_to_php_index.yml",
+            "id": "bbddfb19-a24d-4865-b0ee-22c7831ded7f",
+            "level": "informational",
+            "modified": null,
+            "name": "POST Request To Web Root Or PHP Index",
+            "references": [],
+            "source": {
+              "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+              "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+            },
+            "status": "experimental",
+            "tags": []
+          }
+        ],
+        "rule": {
+          "author": "Zach Mathis (@yamatosecurity)",
+          "created": "2026-10-26",
+          "description": "Detects three or more POST requests to the web root or index.php from the same client within 60 seconds.\nThe PHP2Shell (CVE-2026-109618) exploit chain sends four large multipart POSTs (memory pressure, memory\ndisclosure, memory pressure, execution) to / or /index.php within a few seconds, typically without a\nUser-Agent header. The final request often has no access-log entry because the worker crashes, so the\nthreshold is three.",
+          "false_positives": [
+            "Forms, APIs and login pages that legitimately receive bursts of POST requests to the index page"
+          ],
+          "file": "web_rapid_posts_to_php_index.yml",
+          "id": "1f36585e-0f83-4f4b-8a5a-b0194f9f798c",
+          "level": "medium",
+          "modified": null,
+          "name": "Rapid Repeated POST Requests To PHP Index Page",
+          "references": [
+            "https://github.com/0x4D31/honeypot-data/blob/main/reports/php2shell/2026-10-24-confirmed-rce.md",
+            "https://www.wiz.io/blog/php2shell-php-rce"
+          ],
+          "source": {
+            "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+            "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+          },
+          "status": "experimental",
+          "tags": [
+            "attack.initial-access",
+            "attack.t1190",
+            "cve.2026-109618"
+          ]
+        }
+      }
+    ],
+    "loaded_rules": [],
+    "rules": [
+      {
+        "path": "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+        "sha256": "bba858c7a3a7413abf128f70cd412e3d1d6b828d9524966d721afb2043ae6ef5"
+      }
+    ],
+    "settings": {
+      "arguments": [
+        "iwatobi",
+        "dfir-timeline",
+        "-f",
+        "docs/examples/forensic/access.log",
+        "-r",
+        "rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml",
+        "-z",
+        "UTC",
+        "--forensic-output",
+        "forensic-example.json",
+        "--evidence-manifest",
+        "docs/examples/forensic/evidence-manifest.json",
+        "-q",
+        "-K",
+        "-w",
+        "-Q"
+      ],
+      "custom_formats_yaml": "# Custom log formats.\n#\n# Iwatobi recognizes syslog, Apache/nginx access logs (common, combined, vhost_combined, JSON lines),\n# Apache/nginx error logs, PHP error logs and php-fpm logs by itself, and works out the layout of most\n# other web server access logs automatically. Describe a log here when it is skipped as\n# \"unrecognized log format\", or to pin or correct a layout that was detected automatically.\n#\n# Each format needs a unique name and exactly one of:\n#\n#   nginx:  an nginx log_format string, or the whole log_format directive from nginx.conf\n#   apache: an Apache LogFormat string, or the whole LogFormat directive from the Apache config\n#   regex:  a regular expression with named groups, one per field: (?P<name>...)\n#\n# Optional settings:\n#\n#   files:       file name patterns (* ? [abc]) the format is used for. Without them, the format is\n#                tried on every file whose format is not forced with --log-format, before the\n#                built-in formats, and used when it matches at least half of the first lines.\n#                A pattern with a / is matched against the whole path.\n#   time_format: the format of the time field in chrono strftime syntax (ex: '%Y-%m-%d %H:%M:%S').\n#                Without it, CLF ([10/Oct/2026:13:55:36 +0900]), ISO 8601 and epoch times are read.\n#                Times without a zone are read in the zone given with -z.\n#   logsource:   (regex only) the Sigma logsource of the log, default {category: webserver}.\n#                Ex: {product: linux, service: auth}, {product: apache, service: error}.\n#\n# Web server access logs (nginx, apache, and regex formats with the webserver logsource) are mapped\n# to the Sigma webserver fields. These variable / group names are recognized:\n#\n#   remote_addr, client_ip   -> c-ip              request_method -> cs-method\n#   request_uri, uri + args  -> cs-uri-query      request (GET /x HTTP/1.1) -> method, URI, version\n#   server_protocol          -> cs-version        status         -> sc-status\n#   body_bytes_sent, bytes_sent -> sc-bytes       http_referer   -> cs-referer\n#   http_user_agent          -> cs-user-agent     host, http_host, server_name -> cs-host\n#   remote_user              -> cs-username\n#   time_local, time_iso8601, msec, time, timestamp -> the event time\n#\n# Any other variable or group is kept under its own name and shown in Details. In a regex, write\n# the taxonomy names with _ instead of - (c_ip, cs_method, sc_status, ...).\n#\n# Examples:\n#\n# formats:\n#   # An nginx log_format (paste it from nginx.conf; the whole log_format directive works too)\n#   - name: shop-nginx\n#     nginx: '$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" $request_time $upstream_response_time'\n#     files: ['shop-access.log*']\n#\n#   # An Apache LogFormat\n#   - name: intranet-apache\n#     apache: '%v %h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" %D'\n#\n#   # Any other log: a regex and its Sigma logsource\n#   - name: vpn-auth\n#     regex: '^(?P<timestamp>\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d) (?P<hostname>\\S+) vpnd: (?P<message>.*)$'\n#     time_format: '%Y-%m-%d %H:%M:%S'\n#     logsource: {product: linux, service: auth}\n\nformats:\n",
+      "forced_format": null,
+      "local_timezone_requires_same_environment": false,
+      "rule_filters": "RuleFilters { min_level: \"informational\", enable_deprecated: false, enable_unsupported: false, include_status: [], exclude_status: [], include_tag: [], exclude_tag: [] }",
+      "rules_failed": 0,
+      "rules_loaded": 0,
+      "time_bounds": "inclusive",
+      "time_end": null,
+      "time_start": null,
+      "timezone": "+00:00",
+      "working_directory": "/example/iwatobi"
+    },
+    "sigma_dependency": "sigma-rust v0.7.2",
+    "started_at": "2026-11-27T01:31:06.997898700+00:00",
+    "tool": "iwatobi",
+    "version": "1.0.0"
+  },
+  "schema": "iwatobi-forensic-1.0.0",
+  "source_reference_profile": "uac-1.0.0",
+  "sources": [
+    {
+      "binding": {
+        "collection_id": "synthetic-web-server",
+        "path": "var/log/apache2/access.log",
+        "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741"
+      },
+      "coverage": "parser_completed_not_full_recognition",
+      "events_after_time_filter": 3,
+      "format": "access",
+      "input_path": "docs/examples/forensic/access.log",
+      "integrity": "unchanged_before_after",
+      "mtime": "2026-11-27T01:29:58.765451400+00:00",
+      "read_error": null,
+      "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741",
+      "skipped": null
+    }
+  ],
+  "uac": {
+    "acquisition": {
+      "id": "synthetic-example-acquisition",
+      "status": "supplied"
+    }
+  }
+}

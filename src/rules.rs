@@ -47,6 +47,8 @@ pub struct RuleMeta {
     pub falsepositives: Vec<String>,
     /// File name of the rule (without directories).
     pub rule_file: String,
+    /// Exact loaded YAML bytes and path, distinct from the Sigma rule ID.
+    pub source: Option<(PathBuf, String)>,
 }
 
 /// A detection rule ready to run.
@@ -342,7 +344,7 @@ pub fn canonical_level(level: &str) -> String {
 // --- file discovery -----------------------------------------------------------------------------
 
 /// Every rule file under `path`, sorted so that rule indices are stable between runs.
-fn collect_rule_files(path: &Path) -> Vec<PathBuf> {
+pub(crate) fn collect_rule_files(path: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     if path.is_dir() {
         walk_dir(path, 0, &mut files);
@@ -432,11 +434,27 @@ fn load_file(path: &Path, filters: &RuleFilters, set: &mut RuleSet) {
         set.stats.failed += 1;
         return;
     }
+    let first_rule = set.rules.len();
+    let first_corr = set.correlations.len();
     if docs.iter().any(is_correlation_doc) {
         load_correlation_file(path, docs, filters, set);
     } else {
         for doc in docs {
             load_detection_doc(path, doc, filters, set);
+        }
+    }
+    use sha2::{Digest, Sha256};
+    let source = Some((
+        path.to_path_buf(),
+        format!("{:x}", Sha256::digest(text.as_bytes())),
+    ));
+    for rule in &mut set.rules[first_rule..] {
+        rule.meta.source = source.clone();
+    }
+    for corr in &mut set.correlations[first_corr..] {
+        corr.meta.source = source.clone();
+        for base in &mut corr.base_rules {
+            base.meta.source = source.clone();
         }
     }
 }
@@ -522,6 +540,7 @@ fn meta_from_rule(rule: &Rule, path: &Path) -> RuleMeta {
         tags: rule.tags.clone().unwrap_or_default(),
         falsepositives: rule.falsepositives.clone().unwrap_or_default(),
         rule_file: file_name(path),
+        source: None,
     }
 }
 
@@ -567,6 +586,7 @@ fn meta_from_correlation(spec: &SigmaCorrelationRule, path: &Path) -> Result<Rul
         tags: spec.tags.clone().unwrap_or_default(),
         falsepositives: spec.falsepositives.clone().unwrap_or_default(),
         rule_file: file_name(path),
+        source: None,
     })
 }
 

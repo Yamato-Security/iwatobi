@@ -52,6 +52,7 @@ impl TimeFilter {
 
 #[derive(Clone, Debug)]
 pub struct ScanOptions {
+    pub retain_members: bool,
     pub tz: TzAssumption,
     pub hostname_hint: Option<String>,
     pub time_filter: TimeFilter,
@@ -195,6 +196,9 @@ pub fn scan_lines<I: Iterator<Item = String>>(
                 let mut base_hit = make_base_hit(corr, ci, bi, &sigma_event, &event, ts, summary);
                 base_hit.file = file.clone();
                 base_hit.line = line;
+                if opts.retain_members {
+                    base_hit.native = Some(event.clone());
+                }
                 result.base_hits.push(base_hit);
             }
         }

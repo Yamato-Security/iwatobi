@@ -67,6 +67,8 @@ pub struct BaseHit {
     /// Where the event was read, for a stable order of hits that share a timestamp.
     pub file: Arc<str>,
     pub line: usize,
+    /// Native parsed member retained only for the opt-in forensic export.
+    pub native: Option<ParsedEvent>,
 }
 
 /// A fired correlation.
@@ -146,6 +148,7 @@ pub fn make_base_hit(
         summary,
         file: Arc::from(""),
         line: 0,
+        native: None,
     }
 }
 

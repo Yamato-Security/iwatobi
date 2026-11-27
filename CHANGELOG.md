@@ -1,5 +1,11 @@
 # Changes
 
+## Unreleased
+
+**New Features:**
+
+- Optional forensic JSON export for offline scans: `--forensic-output FILE` retains structured correlation members, native records, rule metadata and source references. `--evidence-manifest FILE` supplies evidence IDs, canonical paths and original file hashes. Missing or inexact evidence stays explicit. Existing output and Sigma evaluation are unchanged; forensic exports are never overwritten. See the [contract](docs/UAC_CONTRACT.md) and [synthetic example](docs/examples/forensic/README.md).
+
 ## 1.0.0 [2026/11/06] - CODE BLUE Release
 
 **New Features:**

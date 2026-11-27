@@ -26,6 +26,238 @@ fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_iwatobi"))
 }
 
+fn sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn forensic_scan(input: &Path, rules: &Path, manifest: Option<&Path>, out: &Path) -> Value {
+    let mut args = vec![
+        "dfir-timeline",
+        if input.is_dir() { "-d" } else { "-f" },
+        input.to_str().unwrap(),
+        "-r",
+        rules.to_str().unwrap(),
+        "-q",
+        "-K",
+        "-w",
+        "-Q",
+        "-z",
+        "UTC",
+        "--forensic-output",
+        out.to_str().unwrap(),
+    ];
+    if let Some(manifest) = manifest {
+        args.extend(["--evidence-manifest", manifest.to_str().unwrap()]);
+    }
+    let result = run(&args);
+    assert_eq!(result.code, 0, "{}\n{}", result.stdout, result.stderr);
+    serde_json::from_slice(&std::fs::read(out).unwrap()).unwrap()
+}
+
+#[test]
+fn forensic_export_preserves_occurrences_metadata_and_unbound_alerts() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("auth.log");
+    let line =
+        "Nov 25 07:01:02 host sshd[3]: Accepted password for alice from 192.0.2.9 port 42315 ssh2";
+    let bytes = format!("{line}\n\n{line}\n");
+    std::fs::write(&input, &bytes).unwrap();
+    let rules = dir.path().join("rule.yml");
+    std::fs::write(&rules, "title: Synthetic accepted login\nid: 44acf41d-bba9-47fd-878a-a7e0d49a1909\nstatus: test\nlevel: high\ndescription: Synthetic rule contract\ntags: [attack.initial_access, attack.t1078]\nlogsource:\n  product: linux\n  service: sshd\ndetection:\n  selection:\n    - 'Accepted password'\n  condition: selection\n").unwrap();
+    let manifest = dir.path().join("binding.json");
+    let binding = serde_json::json!({"acquisition_id": "synthetic-acquisition", "sources": [{
+        "input_path": "auth.log", "collection_id": "collection-a", "path": "var/log/auth.log", "sha256": sha256(bytes.as_bytes())}]});
+    std::fs::write(&manifest, binding.to_string()).unwrap();
+    let output = dir.path().join("out.json");
+    let doc = forensic_scan(&input, &rules, Some(&manifest), &output);
+    let alerts = doc["alerts"].as_array().unwrap();
+    assert_eq!(alerts.len(), 2);
+    let lines: std::collections::BTreeSet<_> = alerts
+        .iter()
+        .map(|a| {
+            assert_eq!(a["event"]["kind"], "alert");
+            assert_eq!(a["evidence_status"], "exact");
+            assert_eq!(a["rule"]["description"], "Synthetic rule contract");
+            assert_eq!(a["rule"]["level"], "high");
+            assert_eq!(a["rule"]["tags"][1], "attack.t1078");
+            assert_eq!(
+                a["rule"]["source"]["sha256"],
+                sha256(&std::fs::read(&rules).unwrap())
+            );
+            let member = &a["members"][0]["evidence"];
+            assert_eq!(member["native"]["raw"], line);
+            let r = &member["location"]["source_refs"][0];
+            assert_eq!(r["collection_id"], "collection-a");
+            assert_eq!(r["sha256"], sha256(bytes.as_bytes()));
+            assert_eq!(r["locator"]["coordinate"], "decoded_decompressed_1_based");
+            r["locator"]["line"].as_u64().unwrap()
+        })
+        .collect();
+    assert_eq!(lines, [1, 3].into_iter().collect());
+    assert_ne!(alerts[0]["id"], alerts[1]["id"]);
+    let unbound = forensic_scan(&input, &rules, None, &dir.path().join("unbound.json"));
+    assert_ne!(doc["run"]["id"], unbound["run"]["id"]);
+    assert_eq!(unbound["alerts"].as_array().unwrap().len(), 2);
+    assert_eq!(unbound["uac"]["acquisition"]["status"], "unbound");
+    assert_eq!(unbound["alerts"][0]["evidence_status"], "unresolved");
+    assert_eq!(
+        unbound["alerts"][0]["members"][0]["evidence"]["location"]["source_refs"],
+        serde_json::json!([])
+    );
+    // Neither clobber nor a bad binding may overwrite evidence or a completed bundle.
+    let bad = run(&[
+        "dfir-timeline",
+        "-f",
+        input.to_str().unwrap(),
+        "-r",
+        rules.to_str().unwrap(),
+        "--forensic-output",
+        output.to_str().unwrap(),
+        "-C",
+        "-o",
+        dir.path().join("native").to_str().unwrap(),
+        "-q",
+        "-K",
+        "-w",
+    ]);
+    assert_ne!(bad.code, 0);
+    assert_eq!(std::fs::read(&input).unwrap(), bytes.as_bytes());
+    let mut wrong = binding;
+    wrong["sources"][0]["sha256"] = serde_json::json!("0".repeat(64));
+    std::fs::write(&manifest, wrong.to_string()).unwrap();
+    let rejected = dir.path().join("rejected.json");
+    let bad = run(&[
+        "dfir-timeline",
+        "-f",
+        input.to_str().unwrap(),
+        "-r",
+        rules.to_str().unwrap(),
+        "--forensic-output",
+        rejected.to_str().unwrap(),
+        "--evidence-manifest",
+        manifest.to_str().unwrap(),
+        "-q",
+        "-K",
+        "-w",
+    ]);
+    assert_ne!(bad.code, 0);
+    assert!(!rejected.exists());
+
+    // Bare CR is a physical boundary in TraceQuarry, but not in Iwatobi.
+    // Keep the native binary-sniff threshold from rejecting the whole fixture.
+    let cr_bytes = format!("{line}\r{line}\n{}", format!("{line}\n").repeat(5));
+    std::fs::write(&input, &cr_bytes).unwrap();
+    wrong["sources"][0]["sha256"] = serde_json::json!(sha256(cr_bytes.as_bytes()));
+    std::fs::write(&manifest, wrong.to_string()).unwrap();
+    let cr = forensic_scan(&input, &rules, Some(&manifest), &dir.path().join("cr.json"));
+    assert_eq!(cr["alerts"].as_array().unwrap().len(), 6);
+    assert_eq!(
+        cr["alerts"][0]["members"][0]["evidence"]["location"]["status"],
+        "partial"
+    );
+    assert_eq!(
+        cr["alerts"][0]["members"][0]["evidence"]["location"]["source_refs"][0]["exact"],
+        false
+    );
+}
+
+#[test]
+fn forensic_multiline_record_is_retained_without_inventing_an_exact_span() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("sysmon.log");
+    let xml = "<Event><System><Provider Name=\"Linux-Sysmon\"/><EventID>1</EventID><TimeCreated SystemTime=\"2026-11-25T07:01:02Z\"/><Computer>synthetic-host</Computer></System><EventData><Data Name=\"Image\">/bin/sh</Data><Data Name=\"CommandLine\">echo\nsynthetic-marker</Data></EventData></Event>\n";
+    std::fs::write(&input, xml).unwrap();
+    let rules = dir.path().join("rule.yml");
+    std::fs::write(&rules, "title: Synthetic multiline\nstatus: test\nlevel: low\nlogsource:\n  product: linux\n  category: process_creation\ndetection:\n  selection:\n    - synthetic-marker\n  condition: selection\n").unwrap();
+    let manifest = dir.path().join("bindings.json");
+    std::fs::write(&manifest, serde_json::json!({"acquisition_id": "synthetic-acquisition", "sources": [{
+        "input_path": "sysmon.log", "collection_id": "collection-a", "path": "var/log/sysmon.log", "sha256": sha256(xml.as_bytes())}]}).to_string()).unwrap();
+    let doc = forensic_scan(
+        &input,
+        &rules,
+        Some(&manifest),
+        &dir.path().join("out.json"),
+    );
+    assert_eq!(doc["alerts"].as_array().unwrap().len(), 1);
+    let member = &doc["alerts"][0]["members"][0]["evidence"];
+    assert!(member["native"]["raw"].as_str().unwrap().contains('\n'));
+    assert_eq!(member["location"]["status"], "partial");
+    assert_eq!(member["location"]["source_refs"][0]["locator"]["line"], 1);
+    assert_eq!(member["location"]["source_refs"][0]["exact"], false);
+    assert_eq!(doc["alerts"][0]["rule"]["id"], Value::Null);
+}
+
+#[test]
+fn forensic_correlation_exports_all_members_across_plain_and_gzip_sources() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let inputs = dir.path().join("logs");
+    std::fs::create_dir(&inputs).unwrap();
+    let line = "192.0.2.17 - - [25/Nov/2026:07:01:02 +0000] \"POST /index.php HTTP/1.1\" 200 149 \"-\" \"-\"\n";
+    let plain = inputs.join("access.log");
+    std::fs::write(&plain, line.repeat(2)).unwrap();
+    let gz = inputs.join("access.log.1.gz");
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(line.as_bytes()).unwrap();
+    let compressed = encoder.finish().unwrap();
+    std::fs::write(&gz, &compressed).unwrap();
+    let mut binding = serde_json::json!({"acquisition_id": "synthetic-acquisition", "sources": [
+        {"input_path": "logs/access.log", "collection_id": "collection-a", "path": "var/log/access.log", "sha256": sha256(line.repeat(2).as_bytes())},
+        {"input_path": "logs/access.log.1.gz", "collection_id": "collection-a", "path": "var/log/access.log.1.gz", "sha256": sha256(&compressed)}]});
+    let manifest = dir.path().join("bindings.json");
+    std::fs::write(&manifest, binding.to_string()).unwrap();
+    let rules = repo().join("rules/iwatobi/web/webserver/web_rapid_posts_to_php_index.yml");
+    let doc = forensic_scan(
+        &inputs,
+        &rules,
+        Some(&manifest),
+        &dir.path().join("out.json"),
+    );
+    let alerts = doc["alerts"].as_array().unwrap();
+    assert_eq!(alerts.len(), 1);
+    let alert = &alerts[0];
+    assert_eq!(alert["kind"], "correlation");
+    assert_eq!(alert["members_total"], 3);
+    assert_eq!(alert["members_truncated"], false);
+    assert_eq!(alert["evidence_status"], "exact");
+    let members = alert["members"].as_array().unwrap();
+    let mut locations = std::collections::BTreeSet::new();
+    for member in members {
+        assert_eq!(member["rule"]["id"], "bbddfb19-a24d-4865-b0ee-22c7831ded7f");
+        assert_eq!(member["evidence"]["native"]["raw"], line.trim_end());
+        let r = &member["evidence"]["location"]["source_refs"][0];
+        if r["path"] == "var/log/access.log.1.gz" {
+            assert_eq!(r["sha256"], sha256(&compressed));
+        }
+        locations.insert((
+            r["path"].as_str().unwrap(),
+            r["locator"]["line"].as_u64().unwrap(),
+        ));
+    }
+    assert_eq!(
+        locations,
+        [
+            ("var/log/access.log", 1),
+            ("var/log/access.log", 2),
+            ("var/log/access.log.1.gz", 1)
+        ]
+        .into_iter()
+        .collect()
+    );
+    binding["sources"].as_array_mut().unwrap().pop();
+    std::fs::write(&manifest, binding.to_string()).unwrap();
+    let partial = forensic_scan(
+        &inputs,
+        &rules,
+        Some(&manifest),
+        &dir.path().join("partial.json"),
+    );
+    assert_eq!(partial["alerts"][0]["evidence_status"], "partial");
+    assert_eq!(partial["alerts"][0]["exact_members"], 2);
+    assert_eq!(partial["alerts"][0]["members_total"], 3);
+}
+
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }

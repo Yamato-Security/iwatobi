@@ -20,6 +20,7 @@ mod correlate;
 mod detect;
 mod errorlog;
 mod event;
+mod forensic;
 mod input;
 mod live;
 mod logsource;

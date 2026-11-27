@@ -34,6 +34,10 @@ honeypot evidence of confirmed remote code execution.
 
 ## ✨ Features
 
+- **Forensic JSON export**: use `--forensic-output` to keep alerts and each correlation
+  member's original log reference. Supply `--evidence-manifest` to bind local files to
+  evidence IDs, paths and hashes. See [Forensic JSON export](#forensic-json-export) and the
+  [contract and examples](docs/UAC_CONTRACT.md). Existing Sigma inputs and output profiles are unchanged.
 - **One command, three inputs**: `dfir-timeline` scans a single file (`-f`), a directory tree
   (`-d`, rotated `.1` / `.2.gz` files included) or the **live system** (`-l`), where Iwatobi finds
   the log files the loaded rules need, asks you for a directory when a log source is missing (or
@@ -157,6 +161,10 @@ Output:
   -C, --clobber             Overwrite files when saving
   -p, --profile <PROFILE>   Output profile (default: standard on the terminal, verbose for files)
   -s, --sort                Sort events before output (warning: this uses much more memory!)
+      --forensic-output <FILE>  Write alerts and supporting log references to JSON
+                            (offline only; never overwritten)
+      --evidence-manifest <FILE>  Map input files to evidence IDs, paths and hashes
+                            (requires --forensic-output; see docs/UAC_CONTRACT.md)
   -N, --no-summary          Do not display the results summary
   -U, --utc                 Output time in UTC format (default: local time)
 
@@ -381,6 +389,35 @@ In a `regex`, write the Sigma field names with `_` for `-` (`c_ip`, `cs_method`,
 names cannot contain `-`. A custom format is also a `--log-format` value (`--log-format shop-nginx`)
 and its name is shown with `-v` (`custom:shop-nginx`; detected layouts show `access-auto`). Use
 `--custom-formats <FILE>` to read the definitions from another file.
+
+### Forensic JSON export
+
+Use this when another tool needs to find the original log entries behind an alert.
+The extra JSON bundle keeps each correlation member as structured data, including its
+native record, rule metadata and source reference. It does not replace ordinary JSON/JSONL
+output, change Sigma evaluation or perform the other tool's evidence linking.
+
+Create a writable `results` directory, then run an offline scan:
+
+```sh
+iwatobi dfir-timeline -d originals -r rules -z UTC \
+  --forensic-output results/alerts.json --evidence-manifest bindings.json
+```
+
+The manifest maps each local file to a supplied acquisition ID, collection ID, canonical
+path and original whole-file SHA-256. Relative input paths are resolved from the manifest's
+directory. You can omit the manifest; detections are retained, but their evidence is unbound.
+
+Keep originals unchanged and use a fresh output path outside the evidence directory.
+The export never overwrites an existing file, even with `--clobber`, and cannot run with
+`--live-analysis`. Exact references identify log occurrences, not proof of an attack or
+complete log coverage. Only link records when the acquisition, collection, path, hash and
+exact locator all match.
+
+Start with the runnable [synthetic example](docs/examples/forensic/README.md), its
+[evidence manifest](docs/examples/forensic/evidence-manifest.json) and
+[sample forensic output](docs/examples/forensic/forensic-output.json). The
+[contract](docs/UAC_CONTRACT.md) explains fields, evidence states, gzip, repeated lines and limits.
 
 ### Output profiles
 

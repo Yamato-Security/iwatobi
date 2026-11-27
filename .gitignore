@@ -4,6 +4,8 @@
 *.json
 *.jsonl
 !test_files/**
+!docs/examples/forensic/evidence-manifest.json
+!docs/examples/forensic/forensic-output.json
 .DS_Store
 .idea/
 .vscode/

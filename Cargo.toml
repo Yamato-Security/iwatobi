@@ -7,7 +7,7 @@ description = "Native Sigma scanner and DFIR timeline generator for Linux logs"
 license = "RPL-1.5"
 edition = "2024"
 rust-version = "1.88"
-include = ["src/**/*", "art/**/*", "config/**/*", "docs/UAC_CONTRACT.md", "LICENSE", "README.md", "CHANGELOG.md"]
+include = ["src/**/*", "art/**/*", "config/**/*", "docs/UAC_CONTRACT.md", "docs/examples/forensic/**/*", "LICENSE", "README.md", "CHANGELOG.md"]
 
 # Every dependency has an explicit floor rather than "*": a wildcard accepts any future
 # release, including a breaking one, on the next `cargo update` (see Suzaku #131/#189).

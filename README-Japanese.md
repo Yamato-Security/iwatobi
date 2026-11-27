@@ -32,6 +32,10 @@ Iwatobiには、実行可能なSigmaHQのLinux（auditd、Sysmon for Linux、sys
 
 ## ✨ 特徴
 
+- **フォレンジックJSONエクスポート**: `--forensic-output`でアラートと相関メンバーごとの元ログの
+  参照を保存します。`--evidence-manifest`でローカルファイルを証拠のID、パス、ハッシュに対応付けます。
+  [使い方](#フォレンジックjsonエクスポート)と[契約仕様・例（英語）](docs/UAC_CONTRACT.md)を参照してください。
+  既存のSigma入力と出力プロファイルは変わりません。
 - **1つのコマンドで3種類の入力**: `dfir-timeline`は、単一のファイル（`-f`）、ディレクトリツリー
   （`-d`、`.1`や`.2.gz`などのローテーションされたファイルを含む）、または**ライブシステム**（`-l`）を
   スキャンします。ライブ解析では、読み込んだルールが必要とするログファイルを自動的に探し、ログソースが
@@ -158,6 +162,10 @@ Output:
   -C, --clobber             Overwrite files when saving
   -p, --profile <PROFILE>   Output profile (default: standard on the terminal, verbose for files)
   -s, --sort                Sort events before output (warning: this uses much more memory!)
+      --forensic-output <FILE>  Write alerts and supporting log references to JSON
+                            (offline only; never overwritten)
+      --evidence-manifest <FILE>  Map input files to evidence IDs, paths and hashes
+                            (requires --forensic-output; see docs/UAC_CONTRACT.md)
   -N, --no-summary          Do not display the results summary
   -U, --utc                 Output time in UTC format (default: local time)
 
@@ -387,6 +395,33 @@ Sigmaのフィールドに対応付けます。その他の変数やグループ
 グループ名には`-`を使えないためです。カスタムフォーマットの名前は`--log-format`にも指定でき
 （`--log-format shop-nginx`）、`-v`では`custom:shop-nginx`のように表示されます（自動検出したレイアウトは
 `access-auto`）。別のファイルから定義を読み込むには`--custom-formats <FILE>`を使います。
+
+### フォレンジックJSONエクスポート
+
+別のツールでアラートの根拠となった元ログを参照する場合に使います。追加のJSONファイルには、
+各相関メンバーのレコード、ルール情報、元ログの参照が構造化データとして入ります。
+通常のJSON/JSONL出力やSigmaの評価は変えず、別ツールの観測結果へのリンクも自動作成しません。
+
+書き込み可能な`results`ディレクトリを作成し、オフラインで実行します。
+
+```sh
+iwatobi dfir-timeline -d originals -r rules -z UTC \
+  --forensic-output results/alerts.json --evidence-manifest bindings.json
+```
+
+マニフェストには、取得した証拠一式のID（`acquisition_id`）、コレクションID、正規パス、
+元ファイル全体のSHA-256を指定します。相対入力パスの基準はマニフェストのディレクトリです。
+マニフェストを省略しても検知結果は残りますが、証拠の参照は未対応付け（`unbound`）になります。
+
+元ファイルは変更せず、証拠ディレクトリの外に新しい出力パスを指定してください。
+`--clobber`を指定しても既存のエクスポートは上書きせず、`--live-analysis`とは併用できません。
+`exact`は元ログの位置を示すもので、攻撃の成功や全行の解析を保証しません。別ツールのレコードに
+リンクするには、取得ID、コレクションID、パス、ハッシュ、正確な位置参照がすべて一致する必要があります。
+
+[実行できる合成データ例（英語）](docs/examples/forensic/README.md)、
+[証拠マニフェスト](docs/examples/forensic/evidence-manifest.json)、
+[出力サンプル](docs/examples/forensic/forensic-output.json)を参照してください。
+フィールド、証拠の状態、gzip、重複行、制限は[契約仕様（英語）](docs/UAC_CONTRACT.md)で説明しています。
 
 ### 出力プロファイル
 

@@ -1,0 +1,11 @@
+{
+  "acquisition_id": "synthetic-example-acquisition",
+  "sources": [
+    {
+      "input_path": "access.log",
+      "collection_id": "synthetic-web-server",
+      "path": "var/log/apache2/access.log",
+      "sha256": "bc1900865712d1fe1b0dd97c3f29bb2db2af356b796a78e56ea5f292590e2741"
+    }
+  ]
+}

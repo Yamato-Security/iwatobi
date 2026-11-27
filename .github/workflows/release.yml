@@ -5,7 +5,7 @@ name: Iwatobi Release Automation
 # zips from the `all-packages` artifact to the GitHub release.
 #
 # Each package holds the iwatobi binary (renamed with the version and platform) plus the
-# `rules/`, `config/` and `art/` folders, the license and the English and Japanese READMEs. Unlike Suzaku, the
+# `rules/`, `config/` and `art/` folders, forensic docs/examples, the license and the English and Japanese READMEs. Unlike Suzaku, the
 # rules live in this repository, so no second checkout is needed.
 
 on:
@@ -84,6 +84,9 @@ jobs:
           Copy-Item -Recurse -Path ./art -Destination release-binaries/art
           Copy-Item -Recurse -Path ./rules -Destination release-binaries/rules
           Copy-Item -Path ./LICENSE, ./README.md, ./README-Japanese.md -Destination release-binaries/
+          New-Item -ItemType Directory -Force -Path release-binaries/docs | Out-Null
+          Copy-Item -Path ./docs/UAC_CONTRACT.md -Destination release-binaries/docs/
+          Copy-Item -Recurse -Path ./docs/examples -Destination release-binaries/docs/examples
 
       - name: Package - Unix
         if: contains(matrix.info.os, 'windows') == false
@@ -94,6 +97,9 @@ jobs:
           cp -r ./art release-binaries/art
           cp -r ./rules release-binaries/rules
           cp ./LICENSE ./README.md ./README-Japanese.md release-binaries/
+          mkdir -p release-binaries/docs
+          cp ./docs/UAC_CONTRACT.md release-binaries/docs/
+          cp -r ./docs/examples release-binaries/docs/examples
 
       # A package for another architecture cannot be run here; for the native ones, check that the
       # packaged binary starts and finds the packaged rules from outside the repository.

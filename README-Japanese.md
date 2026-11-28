@@ -528,6 +528,14 @@ cargo test
 ## 🤝 コントリビューションとライセンス
 
 バグ報告、解析できないログのサンプル、新しいルールは、IssueやPull Requestで歓迎しています。
+変更を提出する前に[コントリビューションガイド](CONTRIBUTING.md)（英語）を確認してください。
+コントリビューターは[Contributor License Agreement（CLA、英語）](CLA.md)への署名が必要です。
+この契約により、Zachary MathisとShirofune Security Co., Ltd.は、対象となる貢献を有料の
+プロプライエタリ・クローズドソース版でも使用できます。貢献の著作権は貢献者に残ります。
+**受け入れられた貢献は、無料のオープンソース・コミュニティ版でも引き続き利用できます。**
+同じコードを商用版で販売・使用することもできます。商用版独自の追加機能や後の改変については、
+このCLAによるソースコードの公開義務はありません。
+
 IwatobiはReciprocal Public License 1.5（RPL-1.5、[LICENSE](LICENSE)）のもとで公開されており、著作権は
 Shirofune Security Co., Ltd.に帰属します。0.1.0までのバージョンはAGPLv3で公開されていました。同梱のSigmaHQの
 ルールは[Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md)、テスト用のログは

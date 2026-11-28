@@ -520,6 +520,13 @@ counts that were derived by hand from the fixture lines.
 ## 🤝 Contributing & License
 
 Bug reports, log samples that do not parse and new rules are welcome as issues and pull requests.
+Read the [contribution guide](CONTRIBUTING.md) before submitting changes. Contributors must sign the
+[Contributor License Agreement](CLA.md), which lets Zachary Mathis and Shirofune Security Co., Ltd. use
+covered contributions in paid, proprietary, closed-source editions while contributors retain ownership.
+**Accepted contributions will also remain available in the free, open-source community edition.**
+Commercial editions may include the same code alongside proprietary additions or modifications that need
+not be published under the CLA.
+
 Iwatobi is released under the [Reciprocal Public License 1.5](LICENSE) (RPL-1.5) and copyright Shirofune
 Security Co., Ltd. Versions up to 0.1.0 were released under the AGPLv3. The bundled SigmaHQ rules are under
 the [Detection Rule License 1.1](rules/sigma/LICENSE.Detection.Rules.md), and the test logs under the

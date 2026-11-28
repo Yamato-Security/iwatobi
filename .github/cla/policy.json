@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status_context": "cla/required",
+  "ignored_coauthor_emails": [
+    "noreply@anthropic.com"
+  ],
+  "ignored_coauthor_account_ids": [
+    81847
+  ]
+}

@@ -4,6 +4,8 @@
 *.json
 *.jsonl
 !test_files/**
+!.github/cla/*.json
+__pycache__/
 .DS_Store
 .idea/
 .vscode/

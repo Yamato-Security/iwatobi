@@ -1,0 +1,72 @@
+name: CLA
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cla.yml'
+      - '.github/scripts/cla_check.py'
+      - '.github/cla/**'
+      - 'tests/cla/**'
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+  issue_comment:
+    types: [created, edited]
+  push:
+    branches: [main]
+    paths:
+      - 'CLA.md'
+      - '.github/cla/**'
+      - '.github/scripts/cla_check.py'
+      - '.github/workflows/cla.yml'
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: 'PR number to recheck; leave empty to check all existing PRs'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: CLA unit tests
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests/cla -v
+
+  enforce:
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      # Privileged PR-target/comment jobs must ONLY run default-branch code.
+      # Never substitute a PR head ref, build a PR, or download its artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Check verified CLA records
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLA_REQUESTED_PR: ${{ inputs.pull_request }}
+        run: |
+          if [ -n "$CLA_REQUESTED_PR" ]; then
+            python3 .github/scripts/cla_check.py --pr "$CLA_REQUESTED_PR"
+          else
+            python3 .github/scripts/cla_check.py
+          fi
